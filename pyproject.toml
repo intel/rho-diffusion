@@ -1,0 +1,80 @@
+[project]
+name = "rho_diffusion"
+version = "0.1.2"
+description = "Parameterizing n-dimensional density fields using denoising diffusion probabilistic models"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE.txt"}
+keywords = ["pytorch", "generative ai", "deep learning", "posterior", "density estimation"]
+
+authors = [
+  {name = "Maxwell Cai", email = "maxwell.cai@intel.com" },
+  {name = "Kin Long Kelvin Lee", email = "kin.long.kelvin.lee@intel.com"}
+]
+
+# Classifiers help users find your project by categorizing it.
+#
+# For a list of valid classifiers, see https://pypi.org/classifiers/
+classifiers = [
+  "Development Status :: 3 - Alpha",
+
+  "Intended Audience :: Developers",
+  "Environment :: GPU",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Astronomy",
+  "Topic :: Scientific/Engineering :: Physics",
+
+  # Pick your license as you wish
+  "License :: OSI Approved :: MIT License",
+
+  # Specify the Python versions you support here. In particular, ensure
+  # that you indicate you support Python 3. These classifiers are *not*
+  # checked by "pip install". See instead "python_requires" below.
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3 :: Only",
+]
+
+dependencies = [
+  "tqdm",
+  "matplotlib",
+  "lightning==1.8.6",
+  "pydantic==1.10.12",
+  "websockets",
+  "einops==0.7.0",
+  "torchmetrics[image]",
+  "geomloss==0.2.6"
+]
+
+[project.optional-dependencies] # Optional
+dev = [
+    "black==23.7.0",
+    "flake8",
+    "flake8-pyproject",
+    "flake8-black",
+    "pre-commit==3.5.0",
+    "hypothesis==4.57.1",
+    "pytest>=7.4.0",
+    ]
+test = ["coverage"]
+compute = [
+    "numpy",
+    "scipy",
+    "torch",
+    "h5py"
+]
+
+[tool.black]
+line-length = 88
+target-versions = ["py39", "py310"]
+include = '\.pyi?$'
+
+[tool.flake8]
+ignore = ["S101", "D100", "D205", "D400"]
+max-line-length = 88
+
+[build-system]
+requires = ["setuptools>=63.0.0", "wheel"]
+build-backend = "setuptools.build_meta"

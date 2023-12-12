@@ -1,0 +1,76 @@
+{
+  "experiment": {
+    "name": "not_working"
+  },
+  "model": {
+    "name": [
+      10,
+      50
+    ],
+    "kwargs": [
+      "A",
+      "B"
+    ]
+  },
+  "optimizer": {
+    "name": "AdamW",
+    "kwargs": null
+  },
+  "lr_scheduler": {
+    "name": null,
+    "kwargs": {
+      "T_max": 10,
+      "eta_min": 0.00001
+    }
+  },
+  "noise_schedule": {
+    "name": "CosineBetaSchedule",
+    "kwargs": {
+      "num_steps": 1000,
+      "offset": 0.008
+    }
+  },
+  "training": {
+    "device": [
+      "xpu",
+      "xpu",
+      "cpu"
+    ],
+    "save_checkpoint_every_n_epochs": 10,
+    "sample_every_n_epochs": 5,
+    "seed": 777
+  },
+  "inference": {
+    "device": "xpu",
+    "checkpoint": "model.pth",
+    "parameter_space": {
+      "s": [
+        3
+      ],
+      "m": [
+        3
+      ],
+      "t": [
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ],
+      "c": [
+        7
+      ]
+    },
+    "cache_file": "inference_output_deepgalaxy.h5",
+    "plot_output_file": "inference_output_deepgalaxy.png",
+    "seed": 777
+  }
+}
