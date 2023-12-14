@@ -56,6 +56,6 @@ This is a proof-of-concept project under active development. Contributions are m
 ## Citation
 If you use `Rho-Diffusion` in your work, please consider cite the following paper:
 
-- Cai, Maxwell X., Lee, Kin Long Kelvin, "Rho-Diffusion: A diffusion-based density estimation framework for computational physics", NeurIPS 2023 Workshop on Machine Learning for Physical Sciences
+- Cai, Maxwell X., Lee, Kin Long Kelvin, "Rho-Diffusion: A diffusion-based density estimation framework for computational physics", NeurIPS 2023 Workshop on Machine Learning for Physical Sciences, arXiv:[2312.08153](https://arxiv.org/abs/2312.08153)
 
 Please refer to `CITATION.cff` for citing the code.
