@@ -15,7 +15,17 @@ from lightning.pytorch.strategies import SingleDeviceStrategy
 from lightning_lite.plugins import CheckpointIO
 from lightning_lite.plugins import ClusterEnvironment
 from lightning_lite.plugins.collectives.torch_collective import default_pg_timeout
+from lightning.pytorch.utilities.rank_zero import rank_zero_info, rank_zero_only, rank_zero_warn
+from lightning.lite.utilities.distributed import (
+    _distributed_available,
+    _get_default_process_group_backend_for_device,
+    _init_dist_connection,
+    _sync_ddp_if_available,
+)
+from lightning.lite.utilities.seed import reset_seed
 from torch import distributed as dist
+
+import logging 
 
 
 class IntelMPIEnvironment(LightningEnvironment):
@@ -218,6 +228,7 @@ class SingleXPUStrategy(SingleDeviceStrategy):
             description=f"{cls.__class__.__name__}",
         )
 
+log = logging.getLogger(__name__)
 
 class DDPXPUStrategy(DDPStrategy):
     strategy_name = "xpu_ddp"
@@ -262,6 +273,18 @@ class DDPXPUStrategy(DDPStrategy):
             description=f"{cls.__class__.__name__} - uses distributed data parallelism"
             " to divide data across multiple XPU tiles.",
         )
+
+    def setup_distributed(self) -> None:
+        log.detail(f"{self.__class__.__name__}: setting up distributed...")
+        reset_seed()
+        self.set_world_ranks()
+        rank_zero_only.rank = self.global_rank
+        self._process_group_backend = self._get_process_group_backend()
+        assert self.cluster_environment is not None
+        _init_dist_connection(self.cluster_environment, 
+                              self._process_group_backend, 
+                              timeout=self._timeout, 
+                              init_method='tcp://127.0.0.1:24566')
 
 
 class XPUBF16Plugin(MixedPrecisionPlugin):

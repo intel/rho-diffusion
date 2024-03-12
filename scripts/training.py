@@ -82,7 +82,9 @@ if args.model_checkpoint_path is not None:
     model_checkpoint_path = args.model_checkpoint_path
     ddpm.backbone.load_state_dict(torch.load(model_checkpoint_path))
 
-strategy = xpu.SingleXPUStrategy() if device == "xpu" else None
+# strategy = xpu.SingleXPUStrategy() if device == "xpu" else None
+strategy = xpu.DDPXPUStrategy(process_group_backend='ccl',
+                              parallel_devices=[torch.device('xpu', 0), torch.device('xpu', 1)]) if device == "xpu" else None
 
 trainer = pl.Trainer(
     strategy=strategy,
