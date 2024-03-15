@@ -506,7 +506,8 @@ class UNet(nn.Module):
         )
 
         if self.num_classes is not None:
-            self.label_emb = nn.Embedding(num_classes, time_embed_dim)
+            self.label_emb = None
+            
 
         ch = input_ch = int(channel_mult[0] * model_channels)
         self.input_blocks = nn.ModuleList(
@@ -681,6 +682,8 @@ class UNet(nn.Module):
         if self.num_classes is not None:
             if y.dim() == 1:
                 assert y.shape == (x.shape[0],)
+                if self.label_emb is None:
+                    self.label_emb = nn.Embedding(self.num_classes, self.time_embed_dim)
                 emb = emb + self.label_emb(y)
             elif y.dim() == 2:
                 # the labels are already embedding

@@ -13,7 +13,7 @@ from rho_diffusion import xpu
 from rho_diffusion.config import ExperimentConfig
 from rho_diffusion.registry import registry
 from rho_diffusion.utils import parameter_space_to_embeddings
-
+import os 
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -83,8 +83,17 @@ if args.model_checkpoint_path is not None:
     ddpm.backbone.load_state_dict(torch.load(model_checkpoint_path))
 
 # strategy = xpu.SingleXPUStrategy() if device == "xpu" else None
+
+
+
+local_rank = int(os.environ.get('PMI_RANK', 0))
+print('local_rank', local_rank)
+
+
 strategy = xpu.DDPXPUStrategy(process_group_backend='ccl',
                               parallel_devices=[torch.device('xpu', 0), torch.device('xpu', 1)]) if device == "xpu" else None
+
+# strategy = xpu.DDPXPUStrategy(process_group_backend='ccl')
 
 trainer = pl.Trainer(
     strategy=strategy,
@@ -92,5 +101,6 @@ trainer = pl.Trainer(
     max_epochs=config.training.max_epochs,
     callbacks=[ipex.IPEXCallback()],
     enable_checkpointing=False,
+    # profiler='simple',
 )
 trainer.fit(ddpm, train_dataloaders=train_loader)
