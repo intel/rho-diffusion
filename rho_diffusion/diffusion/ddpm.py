@@ -301,7 +301,7 @@ class DDPM(AbstractDiffusionPipeline):
         if t.ndim == 1:
             t = self.reshape_timesteps(data, t)
         t.to(data.device)
-        alpha_bar_t = self.schedule["alpha_bar_t"][t]
+        alpha_bar_t = self.schedule["alpha_bar_t"][t].to(data.device)
         noise = self.noise(data)
         # add noise to data
 
@@ -486,13 +486,13 @@ class DDPM(AbstractDiffusionPipeline):
         Check if there is a need to run certain tasks.
         """
         if (
-            self.current_epoch > 0
+            self.current_epoch > 0 and self.sample_every_n_epochs > 0 
             and self.current_epoch % self.sample_every_n_epochs == 0
         ):
             self.p_sample()
 
         if (
-            self.current_epoch > 0
+            self.current_epoch > 0 and self.save_weights_every_n_epochs > 0
             and self.current_epoch % self.save_weights_every_n_epochs == 0
         ):
             self.save_model_weights()
