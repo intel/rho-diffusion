@@ -15,7 +15,11 @@ from lightning.pytorch.strategies import SingleDeviceStrategy
 from lightning_lite.plugins import CheckpointIO
 from lightning_lite.plugins import ClusterEnvironment
 from lightning_lite.plugins.collectives.torch_collective import default_pg_timeout
+from lightning.pytorch.utilities.rank_zero import rank_zero_info, rank_zero_only, rank_zero_warn
+from lightning.lite.utilities.seed import reset_seed
 from torch import distributed as dist
+from typing import Optional
+import logging 
 
 
 class IntelMPIEnvironment(LightningEnvironment):
@@ -115,10 +119,12 @@ class XPUAccelerator(Accelerator):
         it to the first device if not using a distributed/multitile setup.
         """
         # first try and see if we can grab the index from the device
+        
         index = getattr(device, "index", None)
         if index is None and not dist.is_initialized():
             index = 0
-        torch.xpu.set_device(index)
+        print('dev index', index)
+        torch.xpu.set_device(index-1)
 
     def teardown(self) -> None:
         # as it suggests, this is run on cleanup
@@ -141,12 +147,16 @@ class XPUAccelerator(Accelerator):
         List[torch.device]
             List of `torch.device` objects for each device
         """
+        print('devices', [torch.device("xpu", i) for i in devices])
+        # import pdb; pdb.set_trace()
+        # raise Exception('getting parallel devices')
         return [torch.device("xpu", i) for i in devices]
+        return [torch.device("xpu", i) for i in [0,1]]
 
     @staticmethod
     def auto_device_count() -> int:
         # by default, PVC has two tiles per GPU
-        return torch.xpu.device_count()
+        return torch.xpu.device_count() 
 
     @staticmethod
     def is_available() -> bool:
@@ -218,6 +228,7 @@ class SingleXPUStrategy(SingleDeviceStrategy):
             description=f"{cls.__class__.__name__}",
         )
 
+log = logging.getLogger(__name__)
 
 class DDPXPUStrategy(DDPStrategy):
     strategy_name = "xpu_ddp"
@@ -238,7 +249,7 @@ class DDPXPUStrategy(DDPStrategy):
     ) -> None:
         accelerator = XPUAccelerator()
         if cluster_environment is None:
-            cluster_environment = IntelMPIEnvironment()
+            cluster_environment = IntelMPIEnvironment(main_address='127.0.0.1', main_port=23567)
         super().__init__(
             accelerator,
             parallel_devices,
@@ -262,6 +273,64 @@ class DDPXPUStrategy(DDPStrategy):
             description=f"{cls.__class__.__name__} - uses distributed data parallelism"
             " to divide data across multiple XPU tiles.",
         )
+
+    @staticmethod
+    def _init_dist_connection(
+        cluster_environment: ClusterEnvironment,
+        torch_distributed_backend: str,
+        global_rank: Optional[int] = None,
+        world_size: Optional[int] = None,
+        **kwargs: Any,
+    ) -> None:
+        """Utility function to initialize distributed connection by setting env variables and initializing the
+        distributed process group.
+
+        Args:
+            cluster_environment: ``ClusterEnvironment`` instance
+            torch_distributed_backend: Backend to use (includes `nccl` and `gloo`)
+            global_rank: Rank of the current process
+            world_size: Number of processes in the group
+            kwargs: Kwargs for ``init_process_group``
+
+        Raises:
+            RuntimeError:
+                If ``torch.distributed`` is not available
+        """
+        if not torch.distributed.is_available():
+            raise RuntimeError("torch.distributed is not available. Cannot initialize distributed process group")
+        if torch.distributed.is_initialized():
+            log.debug("torch.distributed is already initialized. Exiting early")
+            return
+        global_rank = global_rank if global_rank is not None else cluster_environment.global_rank()
+        world_size = world_size if world_size is not None else cluster_environment.world_size()
+        # os.environ["MASTER_ADDR"] = cluster_environment.main_address
+        # os.environ["MASTER_PORT"] = str(cluster_environment.main_port)
+
+        init_method = 'tcp://%s:%s' % (os.environ["MASTER_ADDR"], cluster_environment.main_port)
+        print('init_method', init_method)
+        log.info(f"Initializing distributed: GLOBAL_RANK: {global_rank}, MEMBER: {global_rank + 1}/{world_size}")
+        torch.distributed.init_process_group(torch_distributed_backend, rank=global_rank, world_size=world_size, init_method=init_method, **kwargs)
+
+        # On rank=0 let everyone know training is starting
+        rank_zero_info(
+            f"{'-' * 100}\n"
+            f"distributed_backend={torch_distributed_backend}\n"
+            f"All distributed processes registered. Starting with {world_size} processes\n"
+            f"{'-' * 100}\n"
+        )
+
+    def setup_distributed(self) -> None:
+        log.detail(f"{self.__class__.__name__}: setting up distributed...")
+        reset_seed()
+        self.set_world_ranks()
+        rank_zero_only.rank = self.global_rank
+        self._process_group_backend = self._get_process_group_backend()
+        assert self.cluster_environment is not None
+        print('before init')
+        self._init_dist_connection(self.cluster_environment, 
+                              self._process_group_backend, 
+                              timeout=self._timeout,)
+        print('after init')
 
 
 class XPUBF16Plugin(MixedPrecisionPlugin):

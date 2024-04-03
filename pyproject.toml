@@ -45,7 +45,8 @@ dependencies = [
   "websockets",
   "einops==0.7.0",
   "torchmetrics[image]",
-  "geomloss==0.2.6"
+  "geomloss==0.2.6",
+  "h5py"
 ]
 
 [project.optional-dependencies] # Optional
@@ -62,8 +63,7 @@ test = ["coverage"]
 compute = [
     "numpy",
     "scipy",
-    "torch",
-    "h5py"
+    "torch"
 ]
 
 [tool.black]

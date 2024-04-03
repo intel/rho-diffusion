@@ -22,6 +22,7 @@ from torchmetrics.image import PeakSignalNoiseRatio
 from torchvision.utils import make_grid
 from torchvision.utils import save_image
 from tqdm import tqdm
+import math
 
 from rho_diffusion.diffusion import schedule
 from rho_diffusion.registry import registry
@@ -60,7 +61,7 @@ class AbstractDiffusionPipeline(ABC, pl.LightningModule):
         self.timesteps = timesteps
         self._python_logger = getLogger(self.__class__.__name__)
 
-    def configure_optimizers(self) -> dict[str, Optimizer | lr_scheduler._LRScheduler]:
+    def configure_optimizers(self, mpi_world_size: int = 1) -> dict[str, Optimizer | lr_scheduler._LRScheduler]:
         """
         Set up the optimizer, and optionally, learning rate scheduler.
 
@@ -91,7 +92,8 @@ class AbstractDiffusionPipeline(ABC, pl.LightningModule):
                 adam_kwargs[key] = opt_kwargs[key]
         # instantiate the optimizer
         # opt = AdamW(self.parameters(), **adam_kwargs)
-
+        # modify the learning rate according to the optional MPI world size
+        opt_kwargs['lr'] = opt_kwargs['lr'] * math.sqrt(mpi_world_size)
         opt = self.optimizer(self.parameters(), **opt_kwargs)
 
         # create schedule
@@ -293,13 +295,13 @@ class DDPM(AbstractDiffusionPipeline):
         self.schedule.dtype = data.dtype
         if t is None:
             t = self.random_timesteps(batch_size)
-        t = t.to(data.device)
-
+    
         # reshapes the time indices so that alpha bar values
         # will be in the right shape for broadcasting
         if t.ndim == 1:
             t = self.reshape_timesteps(data, t)
-        alpha_bar_t = self.schedule["alpha_bar_t"][t]
+        t.to(data.device)
+        alpha_bar_t = self.schedule["alpha_bar_t"][t].to(data.device)
         noise = self.noise(data)
         # add noise to data
 
@@ -307,9 +309,7 @@ class DDPM(AbstractDiffusionPipeline):
         posterior_var = (1 - alpha_bar_t).sqrt() * noise
         if posterior_mean.isnan().sum() > 0 or posterior_var.isnan().sum() > 0:
             print("Error: Noise from the scheduler containers NaN. Aborting...")
-            import sys
-
-            sys.exit(0)
+            import sys; sys.exit(0)
         x_data = posterior_mean + posterior_var
         return [x_data, noise]
 
@@ -470,18 +470,29 @@ class DDPM(AbstractDiffusionPipeline):
         self.log(f"train_loss", loss)
         return loss
 
+    def forward(self, batch: Iterable[Any]) -> Tensor:
+        """A compatibility function to allow this module to be used as a standard PyTorch Module.
+
+        Args:
+            batch (Iterable[Any]): _description_
+
+        Returns:
+            Any: _description_
+        """
+        return self.backbone(batch)
+
     def on_train_epoch_end(self) -> None:
         """
         Check if there is a need to run certain tasks.
         """
         if (
-            self.current_epoch > 0
+            self.current_epoch > 0 and self.sample_every_n_epochs > 0 
             and self.current_epoch % self.sample_every_n_epochs == 0
         ):
             self.p_sample()
 
         if (
-            self.current_epoch > 0
+            self.current_epoch > 0 and self.save_weights_every_n_epochs > 0
             and self.current_epoch % self.save_weights_every_n_epochs == 0
         ):
             self.save_model_weights()
