@@ -92,13 +92,13 @@ if args.model_checkpoint_path is not None:
     ddpm.backbone.load_state_dict(torch.load(model_checkpoint_path))
 
 if use_ipex:
-    strategy = xpu.SingleXPUStrategy() if device == "xpu" else None
+    # strategy = xpu.SingleXPUStrategy() if device == "xpu" else None
     # local_rank = int(os.environ.get('PMI_RANK', 0))
     # print('local_rank', local_rank)
 
 
-    # strategy = xpu.DDPXPUStrategy(process_group_backend='ccl',
-    #                               parallel_devices=[torch.device('xpu', 0), torch.device('xpu', 1)]) if device == "xpu" else None
+    strategy = xpu.DDPXPUStrategy(process_group_backend='ccl',
+                                  parallel_devices=[torch.device('xpu', 0), torch.device('xpu', 1)]) if device == "xpu" else None
 
     # strategy = xpu.DDPXPUStrategy(process_group_backend='ccl')
 

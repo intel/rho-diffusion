@@ -21,7 +21,7 @@ os.environ["PTI_ENABLE_COLLECTION"] = "0"
 def setup_ddp():
     try:
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        init_method = 'tcp://127.0.0.1:29306'
+        init_method = 'tcp://127.0.0.1:29307'
         # init_method = 'file:///home/hpccai1/pytorch_tests/sync_file'
         # init_method = 'file:///tmp/sync_file'
         # init_method = 'env://'
@@ -103,13 +103,15 @@ if mpi_world_size is None:
         dset,
         batch_size=config.training.batch_size,
         shuffle=True,
+        num_workers=8
     )
 else:
     train_sampler = torch.utils.data.distributed.DistributedSampler(dataset=dset)
     train_loader = DataLoader(
         dset,
         batch_size=config.training.batch_size,
-        sampler=train_sampler
+        sampler=train_sampler,
+        num_workers=8
     )
 
 
