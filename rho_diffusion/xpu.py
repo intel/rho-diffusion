@@ -1,3 +1,21 @@
+# Copyright (C) 2024 Intel Corporation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions
+# and limitations under the License.
+#
+#
+# SPDX-License-Identifier: Apache-2.
+
+
 from __future__ import annotations
 
 import os
@@ -6,20 +24,26 @@ from typing import List, Any, Callable
 from datetime import timedelta
 import intel_extension_for_pytorch as ipex
 import torch
+import torch.distributed
+from torch.nn.parallel.distributed import DistributedDataParallel
 from lightning.pytorch.accelerators import Accelerator
 from lightning.pytorch.accelerators import AcceleratorRegistry
 from lightning.pytorch.plugins.environments import LightningEnvironment
-from lightning.pytorch.plugins.precision import NativeMixedPrecisionPlugin as MixedPrecisionPlugin
+from lightning.pytorch.plugins.precision import MixedPrecisionPlugin 
 from lightning.pytorch.strategies import DDPStrategy
-from lightning.pytorch.strategies import SingleDeviceStrategy
-from lightning_lite.plugins import CheckpointIO
-from lightning_lite.plugins import ClusterEnvironment
-from lightning_lite.plugins.collectives.torch_collective import default_pg_timeout
+from lightning.pytorch.strategies import SingleDeviceStrategy, StrategyRegistry
+from lightning.pytorch.plugins.io import CheckpointIO
+from lightning.pytorch.plugins.environments import ClusterEnvironment
+from lightning.fabric.plugins.collectives.torch_collective import default_pg_timeout
 from lightning.pytorch.utilities.rank_zero import rank_zero_info, rank_zero_only, rank_zero_warn
-from lightning.lite.utilities.seed import reset_seed
+# from lightning.lite.utilities.seed import reset_seed
+from lightning.pytorch.utilities.seed import isolate_rng
 from torch import distributed as dist
 from typing import Optional
 import logging 
+from contextlib import nullcontext
+from typing_extensions import override
+from lightning.fabric.utilities.distributed import _distributed_is_initialized
 
 
 class IntelMPIEnvironment(LightningEnvironment):
@@ -250,6 +274,7 @@ class DDPXPUStrategy(DDPStrategy):
         accelerator = XPUAccelerator()
         if cluster_environment is None:
             cluster_environment = IntelMPIEnvironment(main_address='127.0.0.1', main_port=23567)
+        parallel_devices=[torch.device('xpu', 0), torch.device('xpu', 1)]
         super().__init__(
             accelerator,
             parallel_devices,
@@ -309,7 +334,9 @@ class DDPXPUStrategy(DDPStrategy):
         init_method = 'tcp://%s:%s' % (os.environ["MASTER_ADDR"], cluster_environment.main_port)
         print('init_method', init_method)
         log.info(f"Initializing distributed: GLOBAL_RANK: {global_rank}, MEMBER: {global_rank + 1}/{world_size}")
-        torch.distributed.init_process_group(torch_distributed_backend, rank=global_rank, world_size=world_size, init_method=init_method, **kwargs)
+        # torch.distributed.init_process_group(torch_distributed_backend, rank=global_rank, world_size=world_size, init_method=init_method, **kwargs)
+        torch.distributed.init_process_group(torch_distributed_backend, rank=global_rank, world_size=world_size, init_method=init_method)
+        torch.distributed.barrier()
 
         # On rank=0 let everyone know training is starting
         rank_zero_info(
@@ -320,8 +347,9 @@ class DDPXPUStrategy(DDPStrategy):
         )
 
     def setup_distributed(self) -> None:
-        log.detail(f"{self.__class__.__name__}: setting up distributed...")
-        reset_seed()
+        log.info(f"{self.__class__.__name__}: setting up distributed...")
+        # reset_seed()
+        isolate_rng()
         self.set_world_ranks()
         rank_zero_only.rank = self.global_rank
         self._process_group_backend = self._get_process_group_backend()
@@ -332,15 +360,55 @@ class DDPXPUStrategy(DDPStrategy):
                               timeout=self._timeout,)
         print('after init')
 
+    @override
+    def _setup_model(self, model: torch.nn.Module) -> DistributedDataParallel:
+        """Wraps the model into a :class:`~torch.nn.parallel.distributed.DistributedDataParallel` module."""
+        # device_ids = self.determine_ddp_device_ids()
+        device_ids = [self.cluster_environment.local_rank()]
+        print('device idididi', device_ids)
+        log.debug(f"setting up DDP model with device ids: {device_ids}, kwargs: {self._ddp_kwargs}")
+        # https://pytorch.org/docs/stable/notes/cuda.html#id5
+        ctx = torch.xpu.stream(torch.xpu.Stream()) if device_ids is not None else nullcontext()
+        torch.distributed.barrier(device_ids=device_ids)
+        with ctx:
+            ddp_model = DistributedDataParallel(module=model, device_ids=device_ids, output_device=self.cluster_environment.local_rank(), **self._ddp_kwargs)
+            return ddp_model 
 
-class XPUBF16Plugin(MixedPrecisionPlugin):
-    def __init__(self):
-        super().__init__(torch.bfloat16, "xpu")
+    @override
+    def barrier(self, *args: Any, **kwargs: Any) -> None:
+        if not _distributed_is_initialized():
+            return
 
-    def auto_cast_context_manager(self):
-        """
-        Overrides the default behavior, which relies on `torch.amp` where only
-        CPU and CUDA backends are supported. This uses the `xpu.amp` interface
-        explicitly, as done in the IPEX documentation.
-        """
-        return torch.xpu.amp.autocast(self.device, enabled=True, dtype=torch.bfloat16)
+        if torch.distributed.get_backend() == "ccl":
+            print('here9')
+            device_ids = [self.cluster_environment.local_rank()]
+            torch.distributed.all_reduce(torch.xpu.FloatTensor([1]))
+            torch.distributed.barrier(device_ids=device_ids)
+            print('here10')
+            # torch.distributed.barrier()
+        else:
+            torch.distributed.barrier()
+
+    def setup(self, trainer) -> None:
+        self.model_to_device()
+        super().setup(trainer)
+
+    def setup_optimizers(self, trainer) -> None:
+        super().setup_optimizers(trainer)
+
+    def model_to_device(self) -> None:
+        print('root_device', self.root_device)
+        self.model.to(self.root_device)
+
+# class XPUBF16Plugin(MixedPrecisionPlugin):
+#     def __init__(self):
+#         super().__init__(torch.bfloat16, "xpu")
+
+#     def auto_cast_context_manager(self):
+#         """
+#         Overrides the default behavior, which relies on `torch.amp` where only
+#         CPU and CUDA backends are supported. This uses the `xpu.amp` interface
+#         explicitly, as done in the IPEX documentation.
+#         """
+#         return torch.xpu.amp.autocast(self.device, enabled=True, dtype=torch.bfloat16)
+
