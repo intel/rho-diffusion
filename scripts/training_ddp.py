@@ -1,3 +1,21 @@
+# Copyright (C) 2024 Intel Corporation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions
+# and limitations under the License.
+#
+#
+# SPDX-License-Identifier: Apache-2.
+
+
 from __future__ import annotations
 
 import argparse
@@ -8,13 +26,21 @@ from lightning import pytorch as pl
 from torch.utils.data import DataLoader
 
 from rho_diffusion import diffusion
-import intel_extension_for_pytorch as ipex 
-from rho_diffusion import xpu
 from rho_diffusion.config import ExperimentConfig
 from rho_diffusion.registry import registry
 from rho_diffusion.utils import parameter_space_to_embeddings
 import os 
 from tqdm import tqdm 
+
+use_ipex = False
+try:
+    import intel_extension_for_pytorch as ipex 
+    use_ipex = True
+except ImportError:
+    use_ipex = False
+    print('Cannot find Intel extension for PyTorch. The model cannot run on Intel GPUs.')
+    torch.backends.cuda.matmul.allow_tf32 = False 
+    torch.backends.cudnn.allow_tf32 = False
 
 os.environ["PTI_ENABLE_COLLECTION"] = "0"
 
@@ -87,9 +113,9 @@ print(config)
 
 mpi_world_size, local_rank = setup_ddp()
 if mpi_world_size is not None:
-    device = torch.device("xpu:{}".format(local_rank))
+    device = torch.device("%s:%d" % (args.device, local_rank))
 else:
-    device = torch.device("xpu")
+    device = torch.device(args.device)
 
 # configure DDPM noise schedule and dataset
 schedule_class = registry.get("schedules", config.noise_schedule.name)
@@ -151,13 +177,10 @@ else:
 
 # optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=1e-5)
 
-model, optimizer = ipex.optimize(model, optimizer=optimizer)
+if use_ipex:
+    model, optimizer = ipex.optimize(model, optimizer=optimizer)
 
 for epoch in range(args.epochs):
-    if epoch > 0 and epoch < 3:
-        os.environ["PTI_ENABLE_COLLECTION"] = "1"
-    else:
-        os.environ["PTI_ENABLE_COLLECTION"] = "0"
     with tqdm(total=len(dset), disable=(local_rank > 0)) as pbar:
         for step, data in enumerate(train_loader):
             inputs, labels = data[0].to(device), data[1].to(device)
