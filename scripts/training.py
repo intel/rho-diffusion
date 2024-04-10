@@ -1,3 +1,21 @@
+# Copyright (C) 2024 Intel Corporation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions
+# and limitations under the License.
+#
+#
+# SPDX-License-Identifier: Apache-2.
+
+
 from __future__ import annotations
 
 import argparse
@@ -8,12 +26,21 @@ from lightning import pytorch as pl
 from torch.utils.data import DataLoader
 
 from rho_diffusion import diffusion
-from rho_diffusion import ipex
-from rho_diffusion import xpu
 from rho_diffusion.config import ExperimentConfig
 from rho_diffusion.registry import registry
 from rho_diffusion.utils import parameter_space_to_embeddings
+import os 
 
+use_ipex = False
+try:
+    # from rho_diffusion import ipex
+    from rho_diffusion import xpu
+    use_ipex = True
+except ImportError:
+    use_ipex = False
+    print('Cannot find Intel extension for PyTorch. The model cannot run on Intel GPUs.')
+    torch.backends.cuda.matmul.allow_tf32 = False 
+    torch.backends.cudnn.allow_tf32 = False
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -82,13 +109,33 @@ if args.model_checkpoint_path is not None:
     model_checkpoint_path = args.model_checkpoint_path
     ddpm.backbone.load_state_dict(torch.load(model_checkpoint_path))
 
-strategy = xpu.SingleXPUStrategy() if device == "xpu" else None
+if use_ipex:
+    # strategy = xpu.SingleXPUStrategy() if device == "xpu" else None
+    # local_rank = int(os.environ.get('PMI_RANK', 0))
+    # print('local_rank', local_rank)
 
-trainer = pl.Trainer(
-    strategy=strategy,
-    min_epochs=config.training.min_epochs,
-    max_epochs=config.training.max_epochs,
-    callbacks=[ipex.IPEXCallback()],
-    enable_checkpointing=False,
-)
+
+    strategy = xpu.DDPXPUStrategy(process_group_backend='ccl',
+                                  parallel_devices=[torch.device('xpu', 0), torch.device('xpu', 1)]) if device == "xpu" else None
+
+    # strategy = xpu.DDPXPUStrategy(process_group_backend='ccl')
+
+    trainer = pl.Trainer(
+        strategy='xpu_ddp',
+        accelerator='xpu',
+        min_epochs=config.training.min_epochs,
+        max_epochs=config.training.max_epochs,
+        # callbacks=[ipex.IPEXCallback()],
+        enable_checkpointing=False,
+        # profiler='simple',
+    )
+else:
+    trainer = pl.Trainer(
+        min_epochs=config.training.min_epochs,
+        max_epochs=config.training.max_epochs,
+        enable_checkpointing=False,
+        accelerator='gpu', 
+        devices=1
+    )
+print('before fit')
 trainer.fit(ddpm, train_dataloaders=train_loader)

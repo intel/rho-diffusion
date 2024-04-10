@@ -1,6 +1,6 @@
 [project]
 name = "rho_diffusion"
-version = "0.1.2"
+version = "0.1.5"
 description = "Parameterizing n-dimensional density fields using denoising diffusion probabilistic models"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -40,30 +40,30 @@ classifiers = [
 dependencies = [
   "tqdm",
   "matplotlib",
-  "lightning==1.8.6",
+  "lightning==2.2.1",
   "pydantic==1.10.14",
   "websockets",
   "einops==0.7.0",
   "torchmetrics[image]",
-  "geomloss==0.2.6"
+  "geomloss==0.2.6",
+  "h5py"
 ]
 
 [project.optional-dependencies] # Optional
 dev = [
-    "black==23.7.0",
+    "black==24.2.0",
     "flake8",
     "flake8-pyproject",
     "flake8-black",
-    "pre-commit==3.5.0",
-    "hypothesis==4.57.1",
+    "pre-commit==3.6.2",
+    "hypothesis==6.99.2",
     "pytest>=7.4.0",
     ]
 test = ["coverage"]
 compute = [
     "numpy",
     "scipy",
-    "torch",
-    "h5py"
+    "torch"
 ]
 
 [tool.black]
