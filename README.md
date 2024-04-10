@@ -6,7 +6,7 @@
 [![lightning](https://img.shields.io/badge/Lightning-v1.8.6%2B-792ee5?logo=pytorchlightning)](https://lightning.ai/docs/pytorch/1.8.6)
 [![pytorch](https://img.shields.io/badge/PyTorch-v2.0.1%2B-red?logo=pytorch)](https://pytorch.org/get-started/locally/)
 [![ipex](https://img.shields.io/badge/Intel_Extension_For_PyTorch-blue?logo=intel)](https://github.com/intel/intel-extension-for-pytorch)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache-2](https://img.shields.io/badge/Apache-2?style=flat&label=License)](https://www.apache.org/licenses/LICENSE-2.0)
 
 </div>
 
@@ -17,11 +17,19 @@ Instead of resorting to a brute-force evaluation of the density field, `Rho-Diff
 
 ## Installation
 
-Use the provided `conda.yml` to create the minimal PyTorch environment: it uses the `intel-aikit-pytorch` package, which includes XPU support for PyTorch 2.0.100.
-
+Create a new conda environment with
 ```console
-conda env create -f conda.yml -n rho_diffusion
+conda env create -n rho_diffusion python=3.10
 ```
+Then activate the newly created conda environemnt
+```console
+conda activate rho-diffusion
+```
+Then install Intel AI tools with XPU support:
+```console
+pip install  --extra-index-url https://pytorch-extension.intel.com/release-whl-aitools/ torch==2.1.0.post0 torchvision==0.16.0.post0 torchaudio==2.1.0.post0 intel_extension_for_pytorch==2.1.20+xpu oneccl-bind-pt==2.1.200 deepspeed==0.14.0
+```
+
 
 And then install the package with 
 
