@@ -22,7 +22,7 @@ __version__ = "0.1.2"
 
 __all__ = []
 
-from rho_diffusion import models, data, diffusion, metrics
+from rho_diffusion import models, data, diffusion, metrics, activations
 
 try:
     from rho_diffusion import xpu

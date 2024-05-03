@@ -58,4 +58,4 @@ class SymmetricLog(nn.Module):
             Resulting tensor with nonlinearity
         """
         tanx = data.tanh()
-        return tanx * torch.log(data * tanx + 1)
+        return tanx + tanx * torch.log(data * tanx + 1)

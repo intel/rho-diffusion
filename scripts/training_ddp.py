@@ -129,7 +129,8 @@ if mpi_world_size is None:
         dset,
         batch_size=config.training.batch_size,
         shuffle=True,
-        num_workers=8
+        num_workers=8,
+        pin_memory=True
     )
 else:
     train_sampler = torch.utils.data.distributed.DistributedSampler(dataset=dset)
@@ -137,7 +138,8 @@ else:
         dset,
         batch_size=config.training.batch_size,
         sampler=train_sampler,
-        num_workers=8
+        num_workers=8,
+        pin_memory=True
     )
 
 

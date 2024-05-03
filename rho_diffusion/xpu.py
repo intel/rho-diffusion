@@ -22,9 +22,8 @@ import os
 from socket import gethostbyname
 from typing import List, Any, Callable
 from datetime import timedelta
-import intel_extension_for_pytorch as ipex
 import torch
-import torch.distributed
+import intel_extension_for_pytorch as ipex
 from torch.nn.parallel.distributed import DistributedDataParallel
 from lightning.pytorch.accelerators import Accelerator
 from lightning.pytorch.accelerators import AcceleratorRegistry
@@ -41,6 +40,7 @@ from lightning.pytorch.utilities.seed import isolate_rng
 from torch import distributed as dist
 from typing import Optional
 import logging 
+import random
 from contextlib import nullcontext
 from typing_extensions import override
 from lightning.fabric.utilities.distributed import _distributed_is_initialized
@@ -71,13 +71,35 @@ class IntelMPIEnvironment(LightningEnvironment):
             self._main_port = main_port
 
     def world_size(self) -> int:
-        return int(os.environ["PMI_SIZE"])
+        if 'PMI_SIZE' in os.environ:
+            return int(os.environ["PMI_SIZE"])
+        elif 'OMPI_COMM_WORLD_SIZE' in os.environ:
+            return int(os.environ['OMPI_COMM_WORLD_SIZE'])
+        elif 'WORLD_SIZE' in os.environ:
+            return int(os.environ['WORLD_SIZE'])
+        else:
+            return 1  # not invoked with MPI
+        
 
     def local_rank(self) -> int:
-        return int(os.environ["MPI_LOCALRANKID"])
+        if 'MPI_LOCALRANKID' in os.environ:
+            return int(os.environ["MPI_LOCALRANKID"])
+        elif 'OMPI_COMM_WORLD_RANK' in os.environ:
+            return int(os.environ['OMPI_COMM_WORLD_LOCAL_RANK'])
+        elif 'LOCAL_RANK' in os.environ:
+            return int(os.environ['LOCAL_RANK'])
+        else:
+            return 0
 
     def global_rank(self) -> int:
-        return int(os.environ["PMI_RANK"])
+        if 'MPI_LOCALRANKID' in os.environ:
+            return int(os.environ["MPI_LOCALRANKID"])
+        elif 'OMPI_COMM_WORLD_RANK' in os.environ:
+            return int(os.environ['OMPI_COMM_WORLD_RANK'])
+        elif 'RANK' in os.environ:
+            return int(os.environ['RANK'])
+        else:
+            return 0
 
     @property
     def main_address(self) -> str:
@@ -147,12 +169,15 @@ class XPUAccelerator(Accelerator):
         index = getattr(device, "index", None)
         if index is None and not dist.is_initialized():
             index = 0
-        print('dev index', index)
         torch.xpu.set_device(index-1)
 
     def teardown(self) -> None:
         # as it suggests, this is run on cleanup
+        """Ensure that distributed processes close gracefully."""
+        super().teardown()
         torch.xpu.empty_cache()
+        if dist.is_initialized():
+            dist.destroy_process_group()
 
     def get_device_stats(self, device) -> dict[str, any]:
         return torch.xpu.memory_stats(device)
@@ -171,11 +196,11 @@ class XPUAccelerator(Accelerator):
         List[torch.device]
             List of `torch.device` objects for each device
         """
-        print('devices', [torch.device("xpu", i) for i in devices])
         # import pdb; pdb.set_trace()
         # raise Exception('getting parallel devices')
-        return [torch.device("xpu", i) for i in devices]
-        return [torch.device("xpu", i) for i in [0,1]]
+        return [torch.device("xpu", i-1) for i in devices]
+        # return [torch.device("xpu", i) for i in [0,1]]
+        # return [torch.device("xpu", i) for i in [0]]
 
     @staticmethod
     def auto_device_count() -> int:
@@ -273,8 +298,8 @@ class DDPXPUStrategy(DDPStrategy):
     ) -> None:
         accelerator = XPUAccelerator()
         if cluster_environment is None:
-            cluster_environment = IntelMPIEnvironment(main_address='127.0.0.1', main_port=23567)
-        parallel_devices=[torch.device('xpu', 0), torch.device('xpu', 1)]
+            cluster_environment = IntelMPIEnvironment(main_address='127.0.0.1', main_port=random.randint(2048, 65535))
+        parallel_devices = [torch.device("xpu", i) for i in range(cluster_environment.world_size())]
         super().__init__(
             accelerator,
             parallel_devices,
@@ -327,77 +352,70 @@ class DDPXPUStrategy(DDPStrategy):
             log.debug("torch.distributed is already initialized. Exiting early")
             return
         global_rank = global_rank if global_rank is not None else cluster_environment.global_rank()
-        world_size = world_size if world_size is not None else cluster_environment.world_size()
+        # world_size = world_size if world_size is not None else cluster_environment.world_size()
+        local_rank = cluster_environment.local_rank()
+        world_size = cluster_environment.world_size()
         # os.environ["MASTER_ADDR"] = cluster_environment.main_address
         # os.environ["MASTER_PORT"] = str(cluster_environment.main_port)
 
         init_method = 'tcp://%s:%s' % (os.environ["MASTER_ADDR"], cluster_environment.main_port)
         print('init_method', init_method)
         log.info(f"Initializing distributed: GLOBAL_RANK: {global_rank}, MEMBER: {global_rank + 1}/{world_size}")
-        # torch.distributed.init_process_group(torch_distributed_backend, rank=global_rank, world_size=world_size, init_method=init_method, **kwargs)
-        torch.distributed.init_process_group(torch_distributed_backend, rank=global_rank, world_size=world_size, init_method=init_method)
-        torch.distributed.barrier()
+        torch.distributed.init_process_group(torch_distributed_backend, rank=global_rank, world_size=world_size, init_method=init_method, **kwargs)
+        # torch.distributed.init_process_group(torch_distributed_backend, rank=local_rank, world_size=world_size, init_method=init_method)
+        dummy = torch.ones((5,2,), device=f"xpu:{local_rank}")
+        torch.distributed.all_reduce(dummy)
 
-        # On rank=0 let everyone know training is starting
-        rank_zero_info(
-            f"{'-' * 100}\n"
-            f"distributed_backend={torch_distributed_backend}\n"
-            f"All distributed processes registered. Starting with {world_size} processes\n"
-            f"{'-' * 100}\n"
-        )
 
     def setup_distributed(self) -> None:
         log.info(f"{self.__class__.__name__}: setting up distributed...")
-        # reset_seed()
-        isolate_rng()
-        self.set_world_ranks()
-        rank_zero_only.rank = self.global_rank
-        self._process_group_backend = self._get_process_group_backend()
-        assert self.cluster_environment is not None
-        print('before init')
-        self._init_dist_connection(self.cluster_environment, 
-                              self._process_group_backend, 
-                              timeout=self._timeout,)
-        print('after init')
+
+        """Overrides base method so we can perform dummy all_reduce."""
+        port = self.cluster_environment.main_port
+        addr = self.cluster_environment.main_address
+        if not dist.is_initialized():
+            dist.init_process_group(
+                self.process_group_backend,
+                init_method=f"tcp://{addr}:{port}",
+                world_size=self.cluster_environment.world_size(),
+                rank=self.cluster_environment.global_rank(),
+            )
+        # this is to force initialization of distributed backend
+        dummy = torch.ones((5, 2), device=self.root_device)
+        dist.broadcast(dummy, src=0)
 
     @override
     def _setup_model(self, model: torch.nn.Module) -> DistributedDataParallel:
+        # import pdb; pdb.set_trace()
         """Wraps the model into a :class:`~torch.nn.parallel.distributed.DistributedDataParallel` module."""
         # device_ids = self.determine_ddp_device_ids()
         device_ids = [self.cluster_environment.local_rank()]
-        print('device idididi', device_ids)
         log.debug(f"setting up DDP model with device ids: {device_ids}, kwargs: {self._ddp_kwargs}")
         # https://pytorch.org/docs/stable/notes/cuda.html#id5
         ctx = torch.xpu.stream(torch.xpu.Stream()) if device_ids is not None else nullcontext()
         torch.distributed.barrier(device_ids=device_ids)
         with ctx:
             ddp_model = DistributedDataParallel(module=model, device_ids=device_ids, output_device=self.cluster_environment.local_rank(), **self._ddp_kwargs)
+            # ddp_model = DistributedDataParallel(module=model, device_ids=device_ids)
             return ddp_model 
 
     @override
     def barrier(self, *args: Any, **kwargs: Any) -> None:
-        if not _distributed_is_initialized():
-            return
+        # if not _distributed_is_initialized():
+            # return
 
         if torch.distributed.get_backend() == "ccl":
-            print('here9')
             device_ids = [self.cluster_environment.local_rank()]
-            torch.distributed.all_reduce(torch.xpu.FloatTensor([1]))
-            torch.distributed.barrier(device_ids=device_ids)
-            print('here10')
-            # torch.distributed.barrier()
         else:
             torch.distributed.barrier()
 
     def setup(self, trainer) -> None:
-        self.model_to_device()
         super().setup(trainer)
 
     def setup_optimizers(self, trainer) -> None:
         super().setup_optimizers(trainer)
 
     def model_to_device(self) -> None:
-        print('root_device', self.root_device)
         self.model.to(self.root_device)
 
 # class XPUBF16Plugin(MixedPrecisionPlugin):
