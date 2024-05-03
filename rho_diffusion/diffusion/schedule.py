@@ -130,6 +130,13 @@ class AbstractSchedule(ABC):
     def __exit__(self, *args, **kwargs):
         self.dtype = self.__old_dtype__
 
+    def to(self, device) -> None:
+        # Send all properties in the scheduler to the device
+        self._beta_t.to(device)
+        self._alpha_bar_t.to(device)
+        self._alpha_t.to(device)
+        self._sigma_t.to(device)
+
 
 @registry.register_schedule("LinearSchedule")
 class LinearSchedule(AbstractSchedule):

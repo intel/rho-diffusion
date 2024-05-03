@@ -204,7 +204,7 @@ class AbstractDiffusionPipeline(ABC, pl.LightningModule):
         """
         result = {}
         for key in ["alpha_t", "beta_t", "alpha_bar_t", "sigma_t"]:
-            parameter_slice = self.schedule[key][t]
+            parameter_slice = self.schedule[key].to(data.device)[t]
             result[key] = self.reshape_timesteps(data, parameter_slice)
         return result
 
@@ -318,16 +318,16 @@ class DDPM(AbstractDiffusionPipeline):
         # will be in the right shape for broadcasting
         if t.ndim == 1:
             t = self.reshape_timesteps(data, t)
-        t.to(data.device)
-        alpha_bar_t = self.schedule["alpha_bar_t"][t].to(data.device)
+
+        # t.to(data.device)
+        self.schedule.to(data.device)
+        alpha_bar_t = self.schedule["alpha_bar_t"].to(data.device)[t].to(data.device)
         noise = self.noise(data)
         # add noise to data
 
         posterior_mean = alpha_bar_t.sqrt() * data
         posterior_var = (1 - alpha_bar_t).sqrt() * noise
-        if posterior_mean.isnan().sum() > 0 or posterior_var.isnan().sum() > 0:
-            print("Error: Noise from the scheduler containers NaN. Aborting...")
-            import sys; sys.exit(0)
+
         x_data = posterior_mean + posterior_var
         return [x_data, noise]
 

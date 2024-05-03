@@ -707,7 +707,10 @@ class UNet(nn.Module):
                 # the labels are already embedding
                 # import pdb; pdb.set_trace()
                 assert y.shape == emb.shape
-                emb = emb + y
+                if y.device != emb.device:
+                    emb = emb + y.to(emb.device)
+                else:
+                    emb = emb + y
 
         h = x.type(self.dtype)
         for module in self.input_blocks:

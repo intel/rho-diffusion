@@ -77,7 +77,7 @@ print(config)
 
 # configure DDPM noise schedule and dataset
 schedule_class = registry.get("schedules", config.noise_schedule.name)
-schedule = schedule_class(device=device, **config.noise_schedule.kwargs)
+schedule = schedule_class(**config.noise_schedule.kwargs)
 
 dset_class = registry.get("datasets", config.dataset.name)
 dset = dset_class(**config.dataset.kwargs)
@@ -111,18 +111,13 @@ if args.model_checkpoint_path is not None:
 
 if use_ipex:
     # strategy = xpu.SingleXPUStrategy() if device == "xpu" else None
-    # local_rank = int(os.environ.get('PMI_RANK', 0))
-    # print('local_rank', local_rank)
-
-
-    strategy = xpu.DDPXPUStrategy(process_group_backend='ccl',
-                                  parallel_devices=[torch.device('xpu', 0), torch.device('xpu', 1)]) if device == "xpu" else None
-
-    # strategy = xpu.DDPXPUStrategy(process_group_backend='ccl')
+    strategy = xpu.DDPXPUStrategy(process_group_backend='ccl')
 
     trainer = pl.Trainer(
         strategy='xpu_ddp',
+        # strategy='deepspeed_stage_1',
         accelerator='xpu',
+        devices=2,
         min_epochs=config.training.min_epochs,
         max_epochs=config.training.max_epochs,
         # callbacks=[ipex.IPEXCallback()],
@@ -137,5 +132,5 @@ else:
         accelerator='gpu', 
         devices=1
     )
-print('before fit')
+
 trainer.fit(ddpm, train_dataloaders=train_loader)

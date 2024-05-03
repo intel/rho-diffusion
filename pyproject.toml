@@ -1,6 +1,6 @@
 [project]
 name = "rho_diffusion"
-version = "0.1.5"
+version = "0.2.0"
 description = "Parameterizing n-dimensional density fields using denoising diffusion probabilistic models"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -40,7 +40,7 @@ classifiers = [
 dependencies = [
   "tqdm",
   "matplotlib",
-  "lightning==2.2.1",
+  "lightning==2.2.2",
   "pydantic==1.10.12",
   "websockets",
   "einops==0.7.0",
