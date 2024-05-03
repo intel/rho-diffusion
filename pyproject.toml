@@ -51,12 +51,12 @@ dependencies = [
 
 [project.optional-dependencies] # Optional
 dev = [
-    "black==23.7.0",
+    "black==24.2.0",
     "flake8",
     "flake8-pyproject",
     "flake8-black",
-    "pre-commit==3.5.0",
-    "hypothesis==4.57.1",
+    "pre-commit==3.6.2",
+    "hypothesis==6.99.2",
     "pytest>=7.4.0",
     ]
 test = ["coverage"]
