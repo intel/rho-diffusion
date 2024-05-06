@@ -43,7 +43,7 @@ dependencies = [
   "lightning==2.2.2",
   "pydantic==1.10.15",
   "websockets",
-  "einops==0.7.0",
+  "einops==0.8.0",
   "torchmetrics[image]",
   "geomloss==0.2.6",
   "h5py"
