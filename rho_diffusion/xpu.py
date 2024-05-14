@@ -16,6 +16,14 @@
 # SPDX-License-Identifier: Apache-2.
 
 
+"""
+An XPU (Intel GPU) plugin for Lightning.
+
+This code is ported from MatSciML (MIT License): https://github.com/IntelLabs/matsciml/blob/main/matsciml/lightning/xpu.py
+Copyright (C) 2023 Intel Corporation
+"""
+
+
 from __future__ import annotations
 
 import os
