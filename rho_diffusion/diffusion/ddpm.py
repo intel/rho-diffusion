@@ -507,12 +507,14 @@ class DDPM(AbstractDiffusionPipeline):
             self.current_epoch > 0 and self.sample_every_n_epochs > 0 
             and self.current_epoch % self.sample_every_n_epochs == 0
         ):
+            self.eval()
             self.p_sample()
 
         if (
             self.current_epoch > 0 and self.save_weights_every_n_epochs > 0
             and self.current_epoch % self.save_weights_every_n_epochs == 0
         ):
+            self.eval()
             self.save_model_weights()
 
     def p_sample(self):
