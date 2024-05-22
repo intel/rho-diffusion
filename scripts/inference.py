@@ -31,6 +31,7 @@ from rho_diffusion.config import ExperimentConfig
 from rho_diffusion.registry import registry
 from rho_diffusion.utils import parameter_space_to_embeddings
 from rho_diffusion.utils import plot_image_grid
+from rho_diffusion.diffusion import DDPM 
 
 
 try:
@@ -49,6 +50,7 @@ parser.add_argument(
 parser.add_argument(
     "-p",
     dest="model_checkpoint_path",
+    type=Path,
     help="path of the model checkpoint file to initialize the inference model",
     required=False,
 )
@@ -114,7 +116,7 @@ else:
         param_space_labels = torch.tensor(config.inference.parameter_space).to(device)
 
     inference_batch_size = min(len(param_space_labels), args.n_samples)
-    model = diffusion.DDPM(
+    model = diffusion.GaussianDiffusionPipeline(
         backbone=config.model.name,
         backbone_kwargs=config.model.kwargs,
         schedule=schedule,
@@ -130,14 +132,17 @@ else:
         model_checkpoint_path = args.model_checkpoint_path
     else:
         model_checkpoint_path = config.inference.checkpoint
-    model.backbone.load_state_dict(torch.load(model_checkpoint_path))
+    # model.backbone.load_state_dict(torch.load(model_checkpoint_path))
+
+    # model = DDPM.load_from_checkpoint(model_checkpoint_path)
     model.eval()
     model.to(device)
     if use_ipex:
         model = ipex.optimize(model)
         ipex.xpu.synchronize()
 
-    pred_images = model.p_sample()
+    # pred_images = model.p_sample()
+    pred_images = model.generate()
 
     with h5py.File(generated_data_fn, "w") as h5f:
         h5f["data"] = pred_images.cpu().numpy()

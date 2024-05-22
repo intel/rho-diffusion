@@ -26,6 +26,7 @@ from lightning import pytorch as pl
 from torch.utils.data import DataLoader
 
 from rho_diffusion import diffusion
+from rho_diffusion.lightning_progress_bar import TrainingProgressBar
 from rho_diffusion.config import ExperimentConfig
 from rho_diffusion.registry import registry
 from rho_diffusion.utils import parameter_space_to_embeddings
@@ -92,7 +93,7 @@ param_space_embeddings = parameter_space_to_embeddings(
     config.inference.parameter_space,
 ).to(device)
 
-ddpm = diffusion.DDPM(
+ddpm = diffusion.GaussianDiffusionPipeline(
     backbone=config.model.name,
     backbone_kwargs=config.model.kwargs,
     schedule=schedule,
@@ -117,10 +118,10 @@ if use_ipex:
         strategy='xpu_ddp',
         # strategy='deepspeed_stage_1',
         accelerator='xpu',
-        devices=2,
+        devices=strategy.cluster_environment.world_size(),
         min_epochs=config.training.min_epochs,
         max_epochs=config.training.max_epochs,
-        # callbacks=[ipex.IPEXCallback()],
+        callbacks=[TrainingProgressBar()],
         enable_checkpointing=False,
         # profiler='simple',
     )
@@ -134,3 +135,4 @@ else:
     )
 
 trainer.fit(ddpm, train_dataloaders=train_loader)
+trainer.save_checkpoint("model.ckpt")

@@ -18,11 +18,15 @@
 
 from __future__ import annotations
 
+from rho_diffusion.diffusion.abstract_diffusion import *
 from rho_diffusion.diffusion.ddpm import *
+from rho_diffusion.diffusion.gaussian_duffusion import * 
 from rho_diffusion.diffusion.schedule import *
 
 __all__ = [
+    "AbstractDiffusionPipeline",
     "DDPM",
+    "GaussianDiffusionPipeline",
     "LinearSchedule",
     "CosineBetaSchedule",
     "SigmoidSchedule",

@@ -232,3 +232,4 @@ def number_cast_dict(input_dict: dict) -> dict:
             value = _type_cast(value)
         new_dict[key] = value
     return new_dict
+
