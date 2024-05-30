@@ -29,6 +29,7 @@ from rho_diffusion import diffusion
 from rho_diffusion.lightning_progress_bar import TrainingProgressBar
 from rho_diffusion.config import ExperimentConfig
 from rho_diffusion.registry import registry
+from rho_diffusion.models.conditioning import MultiEmbeddings
 from rho_diffusion.utils import parameter_space_to_embeddings
 import os 
 
@@ -89,20 +90,26 @@ train_loader = DataLoader(
     shuffle=True,
 )
 
-param_space_embeddings = parameter_space_to_embeddings(
-    config.inference.parameter_space,
-).to(device)
+# param_space_embeddings = parameter_space_to_embeddings(
+#     config.inference.parameter_space,
+# ).to(device)
+
+# cond_fn = MultiEmbeddings(dset.parameter_space, embedding_dim=128).to(device)
 
 ddpm = diffusion.GaussianDiffusionPipeline(
     backbone=config.model.name,
     backbone_kwargs=config.model.kwargs,
     schedule=schedule,
     loss_func=config.training.loss_fn,
+    timesteps=config.noise_schedule.kwargs['num_steps'],
+    cond_fn=config.model.kwargs['cond_fn'],
+    cond_fn_kwargs={'parameter_space': dset.parameter_space, 'embedding_dim': 128},
     optimizer=config.optimizer.name,
     opt_kwargs=config.optimizer.kwargs,
     sample_every_n_epochs=config.training.sample_every_n_epochs,
-    sampling_batch_size=len(param_space_embeddings),
-    labels=param_space_embeddings,
+    save_checkpoint_every_n_epochs=config.training.save_checkpoint_every_n_epochs,
+    sampling_batch_size=10,
+    sample_parameter_space=config.inference.parameter_space
 )
 
 # Load an existing model checkpoint (if given by command line argument explicity) to resume training 

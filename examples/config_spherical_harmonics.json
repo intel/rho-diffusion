@@ -58,10 +58,11 @@
     "sample_every_n_epochs": 0,
     "loss_fn": "MSELoss",
     "ema_decay": 0.0,
-    "batch_size": 64,
+    "batch_size": 32,
     "min_epochs": 50,
     "max_epochs": 1000,
-    "seed": 777
+    "seed": 777,
+    "benchmark_mode": true
   },
   "inference": {
     "device": "xpu",
