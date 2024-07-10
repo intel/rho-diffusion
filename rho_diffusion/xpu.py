@@ -425,16 +425,3 @@ class DDPXPUStrategy(DDPStrategy):
 
     def model_to_device(self) -> None:
         self.model.to(self.root_device)
-
-# class XPUBF16Plugin(MixedPrecisionPlugin):
-#     def __init__(self):
-#         super().__init__(torch.bfloat16, "xpu")
-
-#     def auto_cast_context_manager(self):
-#         """
-#         Overrides the default behavior, which relies on `torch.amp` where only
-#         CPU and CUDA backends are supported. This uses the `xpu.amp` interface
-#         explicitly, as done in the IPEX documentation.
-#         """
-#         return torch.xpu.amp.autocast(self.device, enabled=True, dtype=torch.bfloat16)
-
