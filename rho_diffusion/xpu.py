@@ -400,9 +400,9 @@ class DDPXPUStrategy(DDPStrategy):
         device_ids = [self.cluster_environment.local_rank()]
         log.debug(f"setting up DDP model with device ids: {device_ids}, kwargs: {self._ddp_kwargs}")
         # https://pytorch.org/docs/stable/notes/cuda.html#id5
-        if "cuda" in model.device:
+        if "cuda" in str(model.device):
             torch.cuda.current_stream()
-        elif "xpu" in model.device:
+        elif "xpu" in str(model.device):
             ctx = torch.xpu.stream(torch.xpu.Stream())
         else:
             ctx = nullcontext()
