@@ -24,6 +24,15 @@ from numpy.typing import ArrayLike
 from torch import Tensor
 
 
+class MultiVariateDataset(torch.utils.data.Dataset):
+    parameter_space = None
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.attributes = None 
+        self.loaded_parameter_space = None 
+
+
 class Density(Tensor):
     """
     Abstracts the concept of "density" as a volumetric tensor.

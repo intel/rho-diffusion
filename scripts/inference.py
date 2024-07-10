@@ -31,6 +31,7 @@ from rho_diffusion.config import ExperimentConfig
 from rho_diffusion.registry import registry
 from rho_diffusion.utils import parameter_space_to_embeddings
 from rho_diffusion.utils import plot_image_grid
+from rho_diffusion.diffusion import DDPM 
 
 
 try:
@@ -49,6 +50,7 @@ parser.add_argument(
 parser.add_argument(
     "-p",
     dest="model_checkpoint_path",
+    type=Path,
     help="path of the model checkpoint file to initialize the inference model",
     required=False,
 )
@@ -80,6 +82,7 @@ args = parser.parse_args()
 
 config = ExperimentConfig.from_json(args.json_config)
 
+
 if args.device is not None:
     # override the `device` setting in the config file
     device = args.device
@@ -105,25 +108,42 @@ if os.path.isfile(generated_data_fn) and args.forced_overwrite is False:
 else:
     schedule_class = registry.get("schedules", config.noise_schedule.name)
     schedule = schedule_class(device=device, **config.noise_schedule.kwargs)
+    parameter_space = registry.get("datasets", config.dataset.name).parameter_space
 
-    if config.dataset.kwargs["use_emb_as_labels"]:
-        param_space_labels = parameter_space_to_embeddings(
-            config.inference.parameter_space,
-        ).to(device)
-    else:
-        param_space_labels = torch.tensor(config.inference.parameter_space).to(device)
+    # if config.dataset.kwargs["use_emb_as_labels"]:
+    #     param_space_labels = parameter_space_to_embeddings(
+    #         config.inference.parameter_space,
+    #     ).to(device)
+    # else:
+    #     param_space_labels = torch.tensor(config.inference.parameter_space).to(device)
 
-    inference_batch_size = min(len(param_space_labels), args.n_samples)
-    model = diffusion.DDPM(
+    # inference_batch_size = min(len(param_space_labels), args.n_samples)
+
+    model = diffusion.GaussianDiffusionPipeline(
+    # model = diffusion.DDPM(
+        # backbone=config.model.name,
+        # backbone_kwargs=config.model.kwargs,
+        # schedule=schedule,
+        # loss_func=config.training.loss_fn,
+        # optimizer=config.optimizer.name,
+        # opt_kwargs=config.optimizer.kwargs,
+        # sample_every_n_epochs=config.training.sample_every_n_epochs,
+        # sampling_batch_size=inference_batch_size,
+        # labels=param_space_labels[:inference_batch_size],
+
+
         backbone=config.model.name,
         backbone_kwargs=config.model.kwargs,
         schedule=schedule,
         loss_func=config.training.loss_fn,
+        timesteps=config.noise_schedule.kwargs['num_steps'],
+        cond_fn=config.model.kwargs['cond_fn'],
+        cond_fn_kwargs={'parameter_space': parameter_space, 'embedding_dim': 128},
         optimizer=config.optimizer.name,
         opt_kwargs=config.optimizer.kwargs,
         sample_every_n_epochs=config.training.sample_every_n_epochs,
-        sampling_batch_size=inference_batch_size,
-        labels=param_space_labels[:inference_batch_size],
+        sampling_batch_size=args.n_samples,
+        sample_parameter_space=config.inference.parameter_space
     )
 
     if args.model_checkpoint_path is not None:
@@ -131,13 +151,19 @@ else:
     else:
         model_checkpoint_path = config.inference.checkpoint
     model.backbone.load_state_dict(torch.load(model_checkpoint_path))
+
+    # model = DDPM.load_from_checkpoint(model_checkpoint_path)
     model.eval()
     model.to(device)
+    print(model)
+
+    # import sys; sys.exit(0)
     if use_ipex:
         model = ipex.optimize(model)
         ipex.xpu.synchronize()
 
-    pred_images = model.p_sample()
+    # pred_images = model.p_sample()
+    pred_images = model.generate(parameter_space=config.inference.parameter_space, random=False)
 
     with h5py.File(generated_data_fn, "w") as h5f:
         h5f["data"] = pred_images.cpu().numpy()

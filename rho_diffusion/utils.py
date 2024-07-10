@@ -30,6 +30,7 @@ import torch.distributed as dist
 from torchvision import transforms
 from torchvision.utils import make_grid
 from torchvision.utils import save_image
+from typing import Union
 
 use_ipex = False
 try:
@@ -209,6 +210,15 @@ def parameter_space_to_embeddings(param_dict: dict) -> torch.Tensor:
         emb.append(calculate_sha512_embedding(combinations[i]))
     return torch.stack(emb)
 
+def sample_from_discrete_parameter_space(param_dict: dict, batch_size: int, random=True, device=None) -> torch.Tensor:
+    keys, values = zip(*param_dict.items())
+    combinations = torch.tensor([v for v in itertools.product(*values)], device=device)
+    if random:
+        idx = torch.randint(low=0, high=combinations.shape[0], size=(batch_size,), device=device)
+    else:
+        idx = torch.arange(start=0, end=batch_size, step=1, device=device)
+    return combinations[idx]
+
 
 def number_cast_dict(input_dict: dict) -> dict:
     """
@@ -232,3 +242,4 @@ def number_cast_dict(input_dict: dict) -> dict:
             value = _type_cast(value)
         new_dict[key] = value
     return new_dict
+

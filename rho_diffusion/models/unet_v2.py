@@ -481,6 +481,7 @@ class UNet(nn.Module):
         conv_resample: bool = True,
         dims: int = 2,
         num_classes: int | bool = None,
+        cond_fn: nn.Module = None,
         use_checkpoint: bool = False,
         use_fp16: bool = False,
         num_heads: int = 1,
@@ -512,16 +513,18 @@ class UNet(nn.Module):
         self.num_head_channels = num_head_channels
         self.num_heads_upsample = num_heads_upsample
 
-        time_embed_dim = model_channels * 4
+        embedding_dim = model_channels * 4
 
         if isinstance(activation, str):
             activation = registry.get("activations", activation)()
 
         self.time_embed = nn.Sequential(
-            nn.Linear(model_channels, time_embed_dim),
+            nn.Linear(model_channels, embedding_dim),
             activation,
-            nn.Linear(time_embed_dim, time_embed_dim),
+            nn.Linear(embedding_dim, embedding_dim),
         )
+
+        self.cond_fn = cond_fn
 
         if self.num_classes is not None:
             self.label_emb = None
@@ -539,7 +542,7 @@ class UNet(nn.Module):
                 layers = [
                     ResBlock(
                         ch,
-                        time_embed_dim,
+                        embedding_dim,
                         dropout,
                         out_channels=int(mult * model_channels),
                         dims=dims,
@@ -568,7 +571,7 @@ class UNet(nn.Module):
                     TimestepEmbedSequential(
                         ResBlock(
                             ch,
-                            time_embed_dim,
+                            embedding_dim,
                             dropout,
                             out_channels=out_ch,
                             dims=dims,
@@ -594,7 +597,7 @@ class UNet(nn.Module):
         self.middle_block = TimestepEmbedSequential(
             ResBlock(
                 ch,
-                time_embed_dim,
+                embedding_dim,
                 dropout,
                 dims=dims,
                 use_checkpoint=use_checkpoint,
@@ -610,7 +613,7 @@ class UNet(nn.Module):
             ),
             ResBlock(
                 ch,
-                time_embed_dim,
+                embedding_dim,
                 dropout,
                 dims=dims,
                 use_checkpoint=use_checkpoint,
@@ -627,7 +630,7 @@ class UNet(nn.Module):
                 layers = [
                     ResBlock(
                         ch + ich,
-                        time_embed_dim,
+                        embedding_dim,
                         dropout,
                         out_channels=int(model_channels * mult),
                         dims=dims,
@@ -652,7 +655,7 @@ class UNet(nn.Module):
                     layers.append(
                         ResBlock(
                             ch,
-                            time_embed_dim,
+                            embedding_dim,
                             dropout,
                             out_channels=out_ch,
                             dims=dims,
@@ -704,13 +707,17 @@ class UNet(nn.Module):
                     self.label_emb = nn.Embedding(self.num_classes, self.time_embed_dim)
                 emb = emb + self.label_emb(y)
             elif y.dim() == 2:
-                # the labels are already embedding
-                # import pdb; pdb.set_trace()
-                assert y.shape == emb.shape
-                if y.device != emb.device:
-                    emb = emb + y.to(emb.device)
+                if y.shape == emb.shape:
+                    # the labels are already embedding
+                    if y.device != emb.device:
+                        emb = emb + y.to(emb.device)
+                    else:
+                        emb = emb + y
                 else:
-                    emb = emb + y
+                    # Multi-categorical labels
+                    assert y.shape[0] == emb.shape[0]  # make sure that the batch sizes match
+                    emb = emb + self.cond_fn(y)
+
 
         h = x.type(self.dtype)
         for module in self.input_blocks:

@@ -102,6 +102,14 @@ def avg_pool_nd(dims, *args, **kwargs):
     raise ValueError(f"unsupported dimensions: {dims}")
 
 
+@registry.register_layer("mean_flat")
+def mean_flat(tensor):
+    """
+    Take the mean over all non-batch dimensions.
+    """
+    return tensor.mean(dim=list(range(1, len(tensor.shape))))
+
+
 def zero_module(module):
     """
     Zero out the parameters of a module and return it.

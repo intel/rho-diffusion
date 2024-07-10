@@ -16,289 +16,87 @@
 # SPDX-License-Identifier: Apache-2.
 
 
-"""
-Abstractions for diffusion noise scheduling
-"""
+
 from __future__ import annotations
 
-from abc import ABC
+
 from collections.abc import Iterable
 from collections.abc import Mapping
-from inspect import getfullargspec
-from logging import getLogger
-from typing import Any
+
+from typing import Any, Union
 
 import torch
-from lightning import pytorch as pl
-from matplotlib import pyplot as plt
 from torch import nn
 from torch import Tensor
-from torch.optim import AdamW
-from torch.optim import lr_scheduler
-from torch.optim import Optimizer
-from torchmetrics.image import PeakSignalNoiseRatio
-from torchvision.utils import make_grid
-from torchvision.utils import save_image
-from tqdm import tqdm
-import math
 
+from tqdm import tqdm
+
+from rho_diffusion.diffusion.abstract_diffusion import AbstractDiffusionPipeline
 from rho_diffusion.diffusion import schedule
 from rho_diffusion.registry import registry
-from rho_diffusion.utils import save_model_checkpoint
+from rho_diffusion.utils import save_model_checkpoint, sample_from_discrete_parameter_space
 
 
 __all__ = ["DDPM"]
 
 
-class AbstractDiffusionPipeline(ABC, pl.LightningModule):
-    def __init__(
-        self,
-        backbone: str | type[nn.Module],
-        backbone_kwargs: dict[str, Any],
-        schedule: schedule.AbstractSchedule,
-        timesteps: int | Tensor = 1000,
-        optimizer: str | type[nn.Module] = None,
-        opt_kwargs: Mapping[str, Any] | None = {},
-    ):
-        super().__init__()
-        if isinstance(backbone, str):
-            backbone = registry.get("models", backbone)
-        self.backbone = backbone(**backbone_kwargs)
-        self.backbone_kwargs = backbone_kwargs
-        if optimizer is None:
-            optimizer = "AdamW"
-        elif isinstance(optimizer, str):
-            optimizer = registry.get("optimizers", optimizer)
-        self.optimizer = optimizer
-        self.schedule = schedule
-        # hold a dictionary of torchmetrics objects
-        self.metrics = nn.ModuleDict({"snr": PeakSignalNoiseRatio()})
-        self.save_hyperparameters(
-            {"model_kwargs": backbone_kwargs, "opt_kwargs": opt_kwargs},
-        )
-        self.timesteps = timesteps
-        self._python_logger = getLogger(self.__class__.__name__)
 
-    def configure_optimizers(self, mpi_world_size: int = 1) -> dict[str, Optimizer | lr_scheduler._LRScheduler]:
-        """
-        Set up the optimizer, and optionally, learning rate scheduler.
-
-        Expects that ``opt_kwargs``
-
-        Returns
-        -------
-        dict[str, Optimizer | lr_scheduler._LRScheduler]
-            Dictionary containing the optimizer and learning rate scheduler
-            as ``opt`` and ``lr_scheduler`` keys.
-
-        Raises
-        ------
-        NameError
-            _description_
-        """
-        opt_kwargs = self.hparams.opt_kwargs
-        adam_spec = getfullargspec(AdamW)
-        adam_kwargs = {}
-        for key, value in zip(
-            filter(lambda x: x not in ["self", "params"], adam_spec.args),
-            adam_spec.defaults,
-        ):
-            if key not in opt_kwargs:
-                adam_kwargs[key] = value
-                opt_kwargs[key] = value
-            elif key in opt_kwargs:
-                adam_kwargs[key] = opt_kwargs[key]
-        # instantiate the optimizer
-        # opt = AdamW(self.parameters(), **adam_kwargs)
-        # modify the learning rate according to the optional MPI world size
-        opt_kwargs['lr'] = opt_kwargs['lr'] * math.sqrt(mpi_world_size)
-        opt = self.optimizer(self.parameters(), **opt_kwargs)
-
-        # create schedule
-        if "lr_schedule" in opt_kwargs:
-            schedule_params = opt_kwargs["lr_schedule"]
-            schedule_class = getattr(lr_scheduler, schedule_params["class"], None)
-            if not schedule_class:
-                raise NameError(
-                    f"Learning rate scheduler was missing, or invalid; passed: {schedule_class}",
-                )
-            # every other key/value pair in the dictionary is assumed
-            # to be a scheduler parameter
-            schedule_kwargs = {
-                key: value for key, value in schedule_params.items() if key != "class"
-            }
-            scheduler = schedule_class(opt, **schedule_kwargs)
-        else:
-            # scheduler = lr_scheduler.OneCycleLR(
-            #     opt,
-            #     max_lr=opt_kwargs["lr"],
-            #     total_steps=100000,
-            # )
-            scheduler = lr_scheduler.CosineAnnealingLR(
-                opt,
-                T_max=10,
-                eta_min=opt_kwargs["lr"] / 10,
-            )
-        return {"optimizer": opt, "lr_scheduler": scheduler}
-
-    @property
-    def schedule(self) -> schedule.AbstractSchedule:
-        return self._schedule
-
-    @schedule.setter
-    def schedule(self, _schedule) -> None:
-        self._schedule = _schedule
-
-    @property
-    def num_timesteps(self) -> int:
-        return len(self.schedule["beta_t"])
-
-    def random_timesteps(self, num_steps: int) -> Tensor:
-        steps = torch.randperm(self.num_timesteps)[:num_steps]
-        return steps
-
-    def reshape_timesteps(self, data: Tensor, t: Tensor) -> Tensor:
-        """
-        Generate the expected shape for timesteps based on input data.
-
-        For images/volumes, this function will generate a view of ``t``,
-        the timesteps, that is broadcast-ready.
-
-        Parameters
-        ----------
-        data : Tensor
-            Input data for noising
-        t : Tensor
-            Timestep tensor
-
-        Returns
-        -------
-        Tensor
-            The ``t`` tensor reshaped appropriately for broadcasting
-        """
-        #
-        shape = (-1, *((1,) * (data.ndim - 1)))
-        return t.view(shape)
-
-    def get_schedule_parameters_at_time(
-        self,
-        data: Tensor,
-        t: torch.LongTensor,
-    ) -> dict[str, Tensor]:
-        """
-        Extracts out all of the relevant noise schedule parameters
-        and formats them into a dictionary for access with the
-        correct shape for broadcasting.
-
-        Parameters
-        ----------
-        data : Tensor
-            Example data to use for shape determination
-        t : torch.LongTensor
-            Timestep indices used to index schedule
-
-        Returns
-        -------
-        dict[str, Tensor]
-            Key/value pairs of each schedule parameter
-        """
-        result = {}
-        for key in ["alpha_t", "beta_t", "alpha_bar_t", "sigma_t"]:
-            parameter_slice = self.schedule[key].to(data.device)[t]
-            result[key] = self.reshape_timesteps(data, parameter_slice)
-        return result
-
-    @property
-    def state(self) -> dict[str, Tensor]:
-        return self._state
-
-    def forward_process(
-        self,
-        data: torch.Tensor,
-        t: Tensor | None = None,
-    ) -> dict[str, torch.Tensor]:
-        """The forward diffusion process is to go from data to Gaussian"""
-        ...
-
-    def reverse_process(self, *args, **kwargs) -> dict[str, torch.Tensor]:
-        """The reverse diffusion process is to go from noise to data"""
-        latent = self.initial_latent(*args, **kwargs)
-        with torch.no_grad():
-            ...
-
-    @staticmethod
-    def make_image_grid(
-        batched_image: Tensor | list[Tensor],
-        filename: str = None,
-    ) -> plt.figure.Figure:
-        """
-        Utility function for taking a batch of images and creating a
-        matplotlib ``Figure`` for display or logging.
-
-        Parameters
-        ----------
-        batched_image : Tensor | list[Tensor]
-            Batch of images, either as a stacked 4D tensor [BCHW] or
-            as a list of 3D tensors [CHW].
-
-        Returns
-        -------
-        plt.figure.Figure
-            Matplotlib ``Figure`` object
-        """
-        if isinstance(batched_image, list):
-            assert (
-                batched_image[0].ndim == 3
-            ), f"Individual images need to be 3D for gridding."
-            batched_image = torch.stack(batched_image)
-        # if tensor doesn't reside on CPU, move it there
-        if batched_image.device != "cpu":
-            batched_image = batched_image.cpu()
-        assert batched_image.ndim == 4, f"Image grid needs to be 4D; dimensions BCHW."
-        image_grid = make_grid(batched_image, normalize=True)
-        # image_grid = image_grid.permute(1, 2, 0).numpy()  # reorder to HWC
-        if filename is not None:
-            save_image(image_grid, fp=filename)
-        # fig, ax = plt.subplots()
-        # ax.imshow(image_grid)
-        # fig.tight_layout()
-        return image_grid
 
 
 class DDPM(AbstractDiffusionPipeline):
     def __init__(
         self,
-        backbone: str | type[nn.Module],
+        backbone: Union[str, type[nn.Module]],
         backbone_kwargs: dict[str, Any],
         schedule: schedule.AbstractSchedule,
-        loss_func: str | type[nn.Module] | nn.Module,
-        timesteps: int | Tensor = 1000,
-        optimizer: str | type[nn.Module] = None,
-        opt_kwargs: Mapping[str, Any] | None = {},
-        labels: Tensor = None,
+        loss_func:Union[str, type[nn.Module], nn.Module],
+        timesteps: Union[int, Tensor] = 1000,
+        cond_fn: str = None,
+        cond_fn_kwargs: dict = None,
+        optimizer: Union[str, type[nn.Module]] = None,
+        opt_kwargs: Union[Mapping[str, Any], None] = {},
         t_checkpoints=None,
         sampling_batch_size=10,
         sample_every_n_epochs=5,
-        save_weights_every_n_epochs=10,
+        sample_parameter_space=None,
+        save_checkpoint_every_n_epochs=10,
+
+
+        # self,
+        # backbone: str | type[nn.Module],
+        # backbone_kwargs: dict[str, Any],
+        # schedule: schedule.AbstractSchedule,
+        # loss_func: str | type[nn.Module] | nn.Module,
+        # timesteps: int | Tensor = 1000,
+        # optimizer: str | type[nn.Module] = None,
+        # opt_kwargs: Mapping[str, Any] | None = {},
+        # labels: Tensor = None,
+        # t_checkpoints=None,
+        # sampling_batch_size=10,
+        # sample_every_n_epochs=5,
+        # save_weights_every_n_epochs=10,
     ):
         super().__init__(
-            backbone,
-            backbone_kwargs,
-            schedule,
-            timesteps,
-            optimizer,
-            opt_kwargs,
+            backbone=backbone,
+            backbone_kwargs=backbone_kwargs,
+            schedule=schedule,
+            timesteps=timesteps,
+            cond_fn=cond_fn,
+            cond_fn_kwargs=cond_fn_kwargs,
+            optimizer=optimizer,
+            opt_kwargs=opt_kwargs
         )
         if isinstance(loss_func, str):
             loss_func = registry.get("nn", loss_func)
         if isinstance(loss_func, type):
             loss_func = loss_func()
         self.loss_func = loss_func
-        self.labels = labels
+
         self.t_checkpoints = t_checkpoints
         self.sampling_batch_size = sampling_batch_size
         self.sample_every_n_epochs = sample_every_n_epochs
-        self.save_weights_every_n_epochs = save_weights_every_n_epochs
+        self.sample_parameter_space = sample_parameter_space
+        self.save_weights_every_n_epochs = save_checkpoint_every_n_epochs
 
     def noise(self, data: Tensor) -> Tensor:
         return torch.randn_like(data)
@@ -414,7 +212,8 @@ class DDPM(AbstractDiffusionPipeline):
                     x_t
                     - (sch_params["beta_t"] / (1 - sch_params["alpha_bar_t"]).sqrt())
                     * pred_noise
-                ) + 0.8 * torch.sqrt(sch_params["beta_t"]) * z
+                # ) + 0.8 * torch.sqrt(sch_params["beta_t"]) * z
+                ) + 0.8 * sch_params["sigma_t"] * z
 
                 x_t = torch.clamp(x_t, -1, 1)
 
@@ -485,7 +284,7 @@ class DDPM(AbstractDiffusionPipeline):
             value = metric(x_data, data)
             self.log(f"train_{key}", metric)
         # log the noise loss
-        self.log(f"train_loss", loss)
+        self.log(f"train_loss", loss, prog_bar=True)
         return loss
 
     def forward(self, batch: Iterable[Any]) -> Tensor:
@@ -517,7 +316,7 @@ class DDPM(AbstractDiffusionPipeline):
             self.eval()
             self.save_model_weights()
 
-    def p_sample(self):
+    def p_sample(self, parameter_space, random=False):
         if hasattr(self, "data_shape"):
             # infer the data size from `self.data`
             sampling_data_shape = [int(x) for x in self.data_shape]
@@ -536,9 +335,10 @@ class DDPM(AbstractDiffusionPipeline):
             device=self.device,
         )
 
+        cond = sample_from_discrete_parameter_space(parameter_space, sample_data.shape[0], random=random, device=self.device)
         results = self.reverse_process(
             x_T=sample_data,
-            conditions=self.labels,
+            conditions=cond,
             t_checkpoints=self.t_checkpoints,
         )
         figure = self.make_image_grid(
@@ -553,6 +353,12 @@ class DDPM(AbstractDiffusionPipeline):
         #     f"images/train_step{step}_rank{rank}_images.png",
         # )
         return figure
+
+    def generate(self, parameter_space=None, random=False):
+        if parameter_space is None:
+            parameter_space = self.sample_parameter_space
+        return self.p_sample(parameter_space=parameter_space, random=random)
+
 
     def save_model_weights(self):
         print("saving model checkpoints...")
