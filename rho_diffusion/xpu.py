@@ -400,7 +400,12 @@ class DDPXPUStrategy(DDPStrategy):
         device_ids = [self.cluster_environment.local_rank()]
         log.debug(f"setting up DDP model with device ids: {device_ids}, kwargs: {self._ddp_kwargs}")
         # https://pytorch.org/docs/stable/notes/cuda.html#id5
-        ctx = torch.xpu.stream(torch.xpu.Stream()) if device_ids is not None else nullcontext()
+        if "cuda" in model.device:
+            torch.cuda.current_stream()
+        elif "xpu" in model.device:
+            ctx = torch.xpu.stream(torch.xpu.Stream())
+        else:
+            ctx = nullcontext()
         torch.distributed.barrier(device_ids=device_ids)
         with ctx:
             ddp_model = DistributedDataParallel(module=model, device_ids=device_ids, output_device=self.cluster_environment.local_rank(), **self._ddp_kwargs)
