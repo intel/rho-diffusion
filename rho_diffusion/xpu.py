@@ -407,16 +407,6 @@ class DDPXPUStrategy(DDPStrategy):
             # ddp_model = DistributedDataParallel(module=model, device_ids=device_ids)
             return ddp_model 
 
-    # @override
-    # def barrier(self, *args: Any, **kwargs: Any) -> None:
-    #     # if not _distributed_is_initialized():
-    #         # return
-
-    #     if torch.distributed.get_backend() == "ccl":
-    #         device_ids = [self.cluster_environment.local_rank()]
-    #     else:
-    #         torch.distributed.barrier()
-
     def setup(self, trainer) -> None:
         super().setup(trainer)
 
