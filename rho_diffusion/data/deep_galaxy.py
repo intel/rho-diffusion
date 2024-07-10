@@ -32,16 +32,19 @@ from rho_diffusion import utils
 from rho_diffusion.registry import registry
 from rho_diffusion.models.conditioning import MultiEmbeddings
 from rho_diffusion.data.base import MultiVariateDataset
+from rho_diffusion.data.parameter_space import DiscreteParameterSpace
 
 
 @registry.register_dataset("DeepGalaxyDataset")
 class DeepGalaxyDataset(MultiVariateDataset):
 
-    parameter_space = {'s': [0.25, 0.5, 0.75, 1, 1.25, 1.5], 
-                       'm': [0.25, 0.5, 0.75, 1, 1.25, 1.5], 
-                       't': list(range(300, 655, 5)), 
-                       'c': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
-                       }
+    parameter_space = DiscreteParameterSpace(
+        param_dict={'s': [0.25, 0.5, 0.75, 1, 1.25, 1.5], 
+                    'm': [0.25, 0.5, 0.75, 1, 1.25, 1.5], 
+                    't': list(range(300, 655, 5)), 
+                    'c': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+                    },
+        sampler=None)
 
 
 
@@ -64,6 +67,7 @@ class DeepGalaxyDataset(MultiVariateDataset):
         self.dset_name_pattern = (dset_name_pattern,)
         self.camera_pos = camera_pos
         self.t_lim = t_lim
+        self.loaded_parameter_space = DiscreteParameterSpace()
         self.loaded_parameter_space = {
             "s": [],
             "m": [],
@@ -242,7 +246,6 @@ class DeepGalaxyDataset(MultiVariateDataset):
 
         # labels_emb_set.append(labels_emb)
         num_classes = np.unique(labels_t_set).shape[0]
-        print("Number of classes:", num_classes)
 
         self.loaded_parameter_space["m"] = sorted(self.loaded_parameter_space["m"])
         self.loaded_parameter_space["s"] = sorted(self.loaded_parameter_space["s"])

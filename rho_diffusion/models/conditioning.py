@@ -22,10 +22,10 @@ from torch import functional as F
 import numpy as np 
 from collections import OrderedDict
 from typing import Union
-from sklearn.preprocessing import LabelEncoder
 import itertools
 
 from rho_diffusion.registry import registry
+from rho_diffusion.data.parameter_space import AbstractParameterSpace
 
 
 @registry.register_layer("MultiEmbeddings")
@@ -33,7 +33,7 @@ class MultiEmbeddings(nn.Module):
     """Generates embeddings from an N-dimensional parameter space defined in a dictionary structure.
     """
     def __init__(self, 
-                 parameter_space: Union[dict, OrderedDict] = None, 
+                 parameter_space: AbstractParameterSpace = None, 
                  embedding_dim: int = 512,
                  parameter_space_dim: int = 3,
                  embedding_size: Union[int, list, dict, OrderedDict] = None) -> None:
@@ -53,11 +53,9 @@ class MultiEmbeddings(nn.Module):
         self.parameter_space = parameter_space
         self.embedding_dim = embedding_dim
         self.__label_encoder_fitted = False
-
         if parameter_space is not None and len(parameter_space) > 0:
             # Initialize the embeddings using the parameter space dict
             for key, value in self.parameter_space.items():
-                self.label_encoders[key] = LabelEncoder().fit(value)
                 self.__label_encoder_fitted = True
                 self.embedding_layers[key] = nn.Embedding(num_embeddings=len(value), embedding_dim=self.embedding_dim)
         elif embedding_size is not None:
@@ -66,52 +64,49 @@ class MultiEmbeddings(nn.Module):
                 assert parameter_space_dim is not None, 'parameter_space_dim should be an int input when embedding_size is an int'
                 for i in parameter_space_dim:
                     self.embedding_layers[i] = nn.Embedding(num_embeddings=embedding_size, embedding_dim=embedding_dim)
-                    self.label_encoders[i] = LabelEncoder()  # not yet fitted with any values
             elif isinstance(embedding_size, list):
                 for i in len(embedding_size):
                     self.embedding_layers[i] = nn.Embedding(num_embeddings=embedding_size[i], embedding_dim=embedding_dim)
-                    self.label_encoders[i] = LabelEncoder()  # not yet fitted with any values
             elif isinstance(embedding_size, dict) or isinstance(embedding_dim, OrderedDict):
                 for key, value in embedding_size.items():
                     self.embedding_layers[key] = nn.Embedding(num_embeddings=value, embedding_dim=embedding_dim)
-                    self.label_encoders[key] = LabelEncoder()  # not yet fitted with any values
                 
 
-    def transform_to_categorical(self, params: dict) -> torch.Tensor:
-        """Transforms a batch of parameters to a 2D categorical tensor.
+    # def transform_to_categorical(self, params: dict) -> torch.Tensor:
+    #     """Transforms a batch of parameters to a 2D categorical tensor.
 
-        Args:
-            params (dict): A dict where different parameter vectors are indexed by the correspond key
+    #     Args:
+    #         params (dict): A dict where different parameter vectors are indexed by the correspond key
 
-        Returns:
-            torch.Tensor: A 2D tensor where each row stores the categorical encoded values of the parameter
-        """
-        # batch_size = 0
-        categorical_values = OrderedDict()
-        keys, values = zip(*params.items())
-        combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
+    #     Returns:
+    #         torch.Tensor: A 2D tensor where each row stores the categorical encoded values of the parameter
+    #     """
+    #     # batch_size = 0
+    #     categorical_values = OrderedDict()
+    #     keys, values = zip(*params.items())
+    #     combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
 
-        # for i in range(len(combinations)):
-        for key, param_vec in params.items():
-            if self.__label_encoder_fitted:
-                categorical_values[key] = np.array(self.label_encoders[key].transform(param_vec))
-            else:
-                print(self.label_encoders)
-                categorical_values[key] = np.array(self.label_encoders[key].fit_transform(param_vec))
-            # if batch_size == 0:
-            #     batch_size = len(param_vec)
-            # else:
-            #     # make sure that each feature in the parameter space has the same length with other features
-            #     assert batch_size == len(param_vec)
+    #     # for i in range(len(combinations)):
+    #     for key, param_vec in params.items():
+    #         if self.__label_encoder_fitted:
+    #             categorical_values[key] = np.array(self.label_encoders[key].transform(param_vec))
+    #         else:
+    #             print(self.label_encoders)
+    #             categorical_values[key] = np.array(self.label_encoders[key].fit_transform(param_vec))
+    #         # if batch_size == 0:
+    #         #     batch_size = len(param_vec)
+    #         # else:
+    #         #     # make sure that each feature in the parameter space has the same length with other features
+    #         #     assert batch_size == len(param_vec)
         
-        categorical_tensor = torch.zeros((batch_size, len(categorical_values)), dtype=torch.int)
+    #     categorical_tensor = torch.zeros((batch_size, len(categorical_values)), dtype=torch.int)
 
-        i = 0
-        for key, cat_vec in categorical_values.items():
-            categorical_tensor[:, i] = torch.LongTensor(cat_vec)
-            i += 1
+    #     i = 0
+    #     for key, cat_vec in categorical_values.items():
+    #         categorical_tensor[:, i] = torch.LongTensor(cat_vec)
+    #         i += 1
 
-        return categorical_tensor
+    #     return categorical_tensor
 
 
     

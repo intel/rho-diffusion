@@ -38,7 +38,6 @@ from rho_diffusion.layers import conv_nd
 from rho_diffusion.layers import normalization
 from rho_diffusion.layers import zero_module
 from rho_diffusion.models.common import sinosoidal_position_embedding
-from rho_diffusion.models.conditioning import MultiEmbeddings
 from rho_diffusion.registry import registry
 
 
@@ -717,8 +716,6 @@ class UNet(nn.Module):
                 else:
                     # Multi-categorical labels
                     assert y.shape[0] == emb.shape[0]  # make sure that the batch sizes match
-                    # print(y.shape, emb.shape, self.cond_fn(y).shape)
-                    # import pdb; pdb.set_trace()
                     emb = emb + self.cond_fn(y)
 
 

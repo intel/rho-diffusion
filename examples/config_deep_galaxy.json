@@ -53,7 +53,7 @@
   "noise_schedule": {
     "name": "CosineBetaSchedule",
     "kwargs": {
-      "num_steps": 300,
+      "num_steps": 100,
       "offset": 0.008
     }
   },
