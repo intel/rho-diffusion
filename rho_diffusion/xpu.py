@@ -400,22 +400,17 @@ class DDPXPUStrategy(DDPStrategy):
         device_ids = [self.cluster_environment.local_rank()]
         log.debug(f"setting up DDP model with device ids: {device_ids}, kwargs: {self._ddp_kwargs}")
         # https://pytorch.org/docs/stable/notes/cuda.html#id5
-        ctx = torch.xpu.stream(torch.xpu.Stream()) if device_ids is not None else nullcontext()
+        if "cuda" in str(model.device):
+            torch.cuda.current_stream()
+        elif "xpu" in str(model.device):
+            ctx = torch.xpu.stream(torch.xpu.Stream())
+        else:
+            ctx = nullcontext()
         torch.distributed.barrier(device_ids=device_ids)
         with ctx:
             ddp_model = DistributedDataParallel(module=model, device_ids=device_ids, output_device=self.cluster_environment.local_rank(), **self._ddp_kwargs)
             # ddp_model = DistributedDataParallel(module=model, device_ids=device_ids)
             return ddp_model 
-
-    # @override
-    # def barrier(self, *args: Any, **kwargs: Any) -> None:
-    #     # if not _distributed_is_initialized():
-    #         # return
-
-    #     if torch.distributed.get_backend() == "ccl":
-    #         device_ids = [self.cluster_environment.local_rank()]
-    #     else:
-    #         torch.distributed.barrier()
 
     def setup(self, trainer) -> None:
         super().setup(trainer)
@@ -425,16 +420,3 @@ class DDPXPUStrategy(DDPStrategy):
 
     def model_to_device(self) -> None:
         self.model.to(self.root_device)
-
-# class XPUBF16Plugin(MixedPrecisionPlugin):
-#     def __init__(self):
-#         super().__init__(torch.bfloat16, "xpu")
-
-#     def auto_cast_context_manager(self):
-#         """
-#         Overrides the default behavior, which relies on `torch.amp` where only
-#         CPU and CUDA backends are supported. This uses the `xpu.amp` interface
-#         explicitly, as done in the IPEX documentation.
-#         """
-#         return torch.xpu.amp.autocast(self.device, enabled=True, dtype=torch.bfloat16)
-
