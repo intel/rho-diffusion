@@ -67,13 +67,14 @@ class DeepGalaxyDataset(MultiVariateDataset):
         self.dset_name_pattern = (dset_name_pattern,)
         self.camera_pos = camera_pos
         self.t_lim = t_lim
-        self.loaded_parameter_space = DiscreteParameterSpace()
-        self.loaded_parameter_space = {
-            "s": [],
-            "m": [],
-            "t": [],
-            "c": [],
-        }
+        self.loaded_parameter_space = DiscreteParameterSpace(
+            param_dict = {
+                "s": [],
+                "m": [],
+                "t": [],
+                "c": [],
+            }
+        )
         self.attributes = ['s', 'm', 't', 'c']
         
 

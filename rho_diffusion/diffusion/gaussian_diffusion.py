@@ -849,7 +849,7 @@ class GaussianDiffusionPipeline(AbstractDiffusionPipeline):
         output = torch.where((t == 0), decoder_nll, kl)
         return {"output": output, "pred_xstart": out["pred_xstart"]}
 
-    def training_losses(self, model, x_start, t, model_kwargs=None, noise=None):
+    def training_losses(self, model, x_start, t, model_kwargs={}, noise=None):
         """
         Compute training losses for a single timestep.
 
@@ -1007,6 +1007,12 @@ class GaussianDiffusionPipeline(AbstractDiffusionPipeline):
         data: Tensor,
         t: Union[Tensor,  None] = None,
     ) -> list[Tensor]:
+        batch_size = data.size(0)
+        # send data type to schedule to type cast consistently
+        self.schedule.dtype = data.dtype
+        if t is None:
+            t = self.random_timesteps(batch_size)
+
         noise = self.noise(data)
         x_data = self.q_sample(x_start=data, t=t, noise=noise)
         return [x_data, noise]
@@ -1182,7 +1188,7 @@ class GaussianDiffusionPipeline(AbstractDiffusionPipeline):
         if labels is not None:
             loss = self.training_losses(self.backbone, x_data, t, {'y': labels}, noise)['loss'].mean()
         else:
-            loss = self.training_losses(self.backbone, x_data, t, None, noise)['loss'].mean()
+            loss = self.training_losses(self.backbone, x_data, t, {}, noise)['loss'].mean()
 
         # loss = self.loss_func(pred_noise, noise)
         # as a gauge of how noisy the images are,

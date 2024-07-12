@@ -30,9 +30,10 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from rho_diffusion.data.base import Density
+from rho_diffusion.data.base import Density, MultiVariateDataset
 from rho_diffusion.registry import registry
 from rho_diffusion.utils import calculate_sha512_embedding
+from rho_diffusion.data.parameter_space import DiscreteParameterSpace
 
 """
 Blocks of code are adapted from the following article:
@@ -124,7 +125,7 @@ def compute_spherical_harmonic(
 
 
 @registry.register_dataset("SphericalHarmonicDataset")
-class SphericalHarmonicDataset(Dataset):
+class SphericalHarmonicDataset(MultiVariateDataset):
     def __init__(
         self,
         max_l: int | None,
@@ -156,6 +157,15 @@ class SphericalHarmonicDataset(Dataset):
         random_seed : Optional[int], optional
             _description_, by default None
         """
+
+        parameter_space = DiscreteParameterSpace(
+            param_dict={
+                'l': list(range(0, max_l)),
+                'm': list(range(-max_l, max_l))
+            }
+        )
+        self.loaded_parameter_space = DiscreteParameterSpace()
+
         self.max_l = max_l
         self.random_seed = random_seed
         # configure default grid parameters
