@@ -113,14 +113,23 @@ class MultiEmbeddings(nn.Module):
 
 
     def forward(self, y: torch.Tensor) -> torch.Tensor:
-        assert y.dim() == 2
+        # assert y.dim() == 2
         emb = None
+        # if y.dim() == 1:
+        #     for key, layer in self.embedding_layers.items():
+        #         categorical = torch.where(y[:, None] == torch.tensor(self.parameter_space[key], device=y.device)[None, :])[1]
+        #         emb = layer(categorical)
+        #     return emb
+        # else:
         i = 0
         for key, layer in self.embedding_layers.items():
             # Use the index of each element of the i-th feature in the parameter space as categorical
             # print(y[:, i], self.parameter_space[key])
-
-            categorical = torch.where(y[:, i][:, None] == torch.tensor(self.parameter_space[key], device=y.device)[None, :])[1]
+            if y.dim() == 1:
+                yi = y
+            else:
+                yi = y[:, i]
+            categorical = torch.where(yi[:, None] == torch.tensor(self.parameter_space[key], device=y.device)[None, :])[1]
             if emb is None:
                 emb = layer(categorical)
             else:

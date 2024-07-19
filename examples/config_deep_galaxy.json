@@ -51,10 +51,9 @@
     }
   },
   "noise_schedule": {
-    "name": "CosineBetaSchedule",
+    "name": "LinearSchedule",
     "kwargs": {
-      "num_steps": 100,
-      "offset": 0.008
+      "num_steps": 500
     }
   },
   "training": {

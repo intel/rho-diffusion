@@ -155,8 +155,12 @@ class AbstractDiffusionPipeline(ABC, pl.LightningModule):
     #     return len(self.schedule["beta_t"])
 
     def random_timesteps(self, num_steps: int) -> Tensor:
-        steps = torch.randperm(self.timesteps)[:num_steps]
-        return steps
+
+        # the following line only works if self.timesteps > num_steps
+        # steps = torch.randperm(self.timesteps)[:num_steps]
+        
+        idx = torch.randint(low=0, high=self.timesteps, size=(num_steps,))
+        return torch.arange(0, self.timesteps)[idx]
 
     def reshape_timesteps(self, data: Tensor, t: Tensor) -> Tensor:
         """
