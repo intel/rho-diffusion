@@ -46,7 +46,7 @@
   "lr_scheduler": {
     "name": "CosineAnnealingLR",
     "kwargs": {
-      "T_max": 10,
+      "T_max": 60,
       "eta_min": 0.00001
     }
   },
@@ -60,7 +60,7 @@
     "device": "xpu",
     "np": 1,
     "save_checkpoint_every_n_epochs": 100,
-    "sample_every_n_epochs": 30,
+    "sample_every_n_epochs": 5,
     "loss_fn": "MSELoss",
     "ema_decay": 0.0,
     "batch_size": 64,
