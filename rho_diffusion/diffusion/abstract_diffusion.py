@@ -41,6 +41,9 @@ from abc import ABC
 from torchvision.utils import make_grid
 from torchvision.utils import save_image
 
+# TODO: Make the following import optional
+from diffusers.schedulers.scheduling_utils import SchedulerMixin as DiffusersBaseScheduler 
+
 
 __all__ = ["AbstractDiffusionPipeline"]
 
@@ -50,7 +53,7 @@ class AbstractDiffusionPipeline(ABC, pl.LightningModule):
         self,
         backbone: Union[str, type[nn.Module]],
         backbone_kwargs: dict[str, Any],
-        schedule: schedule.AbstractSchedule,
+        schedule: Union[str, schedule.AbstractSchedule, DiffusersBaseScheduler],
         timesteps: Union[int, Tensor] = 1000,
         cond_fn: Union[str, type[nn.Module]] = None,
         cond_fn_kwargs: dict = None,
@@ -140,7 +143,10 @@ class AbstractDiffusionPipeline(ABC, pl.LightningModule):
                 T_max=10,
                 eta_min=opt_kwargs["lr"] / 10,
             )
-        return {"optimizer": opt, "lr_scheduler": scheduler}
+            scheduler = None 
+        # return {"optimizer": opt, "lr_scheduler": scheduler}
+        return {"optimizer": opt}
+
 
     @property
     def schedule(self) -> schedule.AbstractSchedule:

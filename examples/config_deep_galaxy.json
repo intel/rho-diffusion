@@ -60,7 +60,7 @@
     "device": "xpu",
     "np": 1,
     "save_checkpoint_every_n_epochs": 100,
-    "sample_every_n_epochs": 5,
+    "sample_every_n_epochs": 10,
     "loss_fn": "MSELoss",
     "ema_decay": 0.0,
     "batch_size": 64,

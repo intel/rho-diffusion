@@ -159,12 +159,6 @@ class GaussianDiffusionPipeline(AbstractDiffusionPipeline):
 
     def __init__(
         self,
-        # *,
-        # betas,
-        # model_mean_type,
-        # model_var_type,
-        # loss_type,
-        # rescale_timesteps=False,
         backbone: Union[str, type[nn.Module]],
         backbone_kwargs: dict[str, Any],
         schedule: schedule.AbstractSchedule,
@@ -226,7 +220,7 @@ class GaussianDiffusionPipeline(AbstractDiffusionPipeline):
         else:
             self.model_mean_type = ModelMeanType.EPSILON
 
-        self.model_mean_type = ModelMeanType.PREVIOUS_X
+        # self.model_mean_type = ModelMeanType.PREVIOUS_X
 
         if diffusion_defaults['learn_sigma'] is True:
             self.model_var_type = ModelVarType.LEARNED_RANGE
