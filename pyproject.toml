@@ -55,7 +55,7 @@ dev = [
     "flake8",
     "flake8-pyproject",
     "flake8-black",
-    "pre-commit==3.7.1",
+    "pre-commit==3.8.0",
     "hypothesis==6.105.1",
     "pytest>=7.4.0",
     ]
