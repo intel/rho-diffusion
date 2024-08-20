@@ -212,8 +212,8 @@ class DDPM(AbstractDiffusionPipeline):
                     x_t
                     - (sch_params["beta_t"] / (1 - sch_params["alpha_bar_t"]).sqrt())
                     * pred_noise
-                # ) + 0.8 * torch.sqrt(sch_params["beta_t"]) * z
-                ) + 0.8 * sch_params["sigma_t"] * z
+                ) + 0.8 * torch.sqrt(sch_params["beta_t"]) * z
+                # ) + 0.8 * sch_params["sigma_t"] * z
 
                 x_t = torch.clamp(x_t, -1, 1)
 
@@ -307,7 +307,7 @@ class DDPM(AbstractDiffusionPipeline):
             and self.current_epoch % self.sample_every_n_epochs == 0
         ):
             self.eval()
-            self.p_sample()
+            self.generate()
 
         if (
             self.current_epoch > 0 and self.save_weights_every_n_epochs > 0

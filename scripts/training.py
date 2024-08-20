@@ -78,8 +78,21 @@ else:
 print(config)
 
 # configure DDPM noise schedule and dataset
-schedule_class = registry.get("schedules", config.noise_schedule.name)
-schedule = schedule_class(**config.noise_schedule.kwargs)
+# schedule_class = registry.get("schedules", config.noise_schedule.name)
+# schedule = schedule_class(**config.noise_schedule.kwargs)
+
+
+import diffusers 
+schedule = diffusers.DDPMScheduler(
+    num_train_timesteps=config.noise_schedule.kwargs['num_steps'],
+    beta_schedule='squaredcos_cap_v2',
+    prediction_type='epsilon',
+    variance_type='fixed_large',
+    # variance_type='learned',
+    clip_sample=True,
+    clip_sample_range=0.5,
+    rescale_betas_zero_snr=True
+)
 
 dset_class = registry.get("datasets", config.dataset.name)
 dset = dset_class(**config.dataset.kwargs)
@@ -96,7 +109,7 @@ train_loader = DataLoader(
 
 # cond_fn = MultiEmbeddings(dset.parameter_space, embedding_dim=128).to(device)
 
-ddpm = diffusion.GaussianDiffusionPipeline(
+ddpm = diffusion.DiffusersDDPMPipeline(
     backbone=config.model.name,
     backbone_kwargs=config.model.kwargs,
     schedule=schedule,
@@ -108,7 +121,7 @@ ddpm = diffusion.GaussianDiffusionPipeline(
     opt_kwargs=config.optimizer.kwargs,
     sample_every_n_epochs=config.training.sample_every_n_epochs,
     save_checkpoint_every_n_epochs=config.training.save_checkpoint_every_n_epochs,
-    sampling_batch_size=10,
+    sampling_batch_size=16,
     sample_parameter_space=config.inference.parameter_space
 )
 

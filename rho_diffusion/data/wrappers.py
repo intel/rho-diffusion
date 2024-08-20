@@ -27,13 +27,15 @@ from torchvision.datasets import CIFAR10
 from torchvision.datasets import MNIST
 
 from rho_diffusion.registry import registry
+from rho_diffusion.data.base import UnivariateDataset
+from rho_diffusion.data.parameter_space import DiscreteParameterSpace
 
 
 __all__ = ["CIFAR10Dataset", "MNISTDataset"]
 
 
 @registry.register_dataset("CIFAR10Dataset")
-class CIFAR10Dataset(CIFAR10):
+class CIFAR10Dataset(CIFAR10, UnivariateDataset):
     def __init__(
         self,
         root: str,
@@ -52,15 +54,21 @@ class CIFAR10Dataset(CIFAR10):
             **kwargs,
         )
 
-    def __getitem__(self, index: int) -> dict[str, Tensor]:
-        data, label = super().__getitem__(index)
-        return {"data": data, "label": label}
+        self.parameter_space = DiscreteParameterSpace(
+            param_dict={
+                'labels': [0,1,2,3,4,5,6,7,8,9]
+            }
+        )
+
+    # def __getitem__(self, index: int) -> dict[str, Tensor]:
+    #     data, label = super().__getitem__(index)
+    #     return {"data": data, "label": label}
 
     @property
     def default_transforms(self) -> t.Compose:
         return t.Compose(
             [
-                t.Resize((32, 32)),
+                # t.Resize((32, 32)),
                 t.ToTensor(),  # Scales data into [0,1]
                 t.Lambda(lambda t: (t * 2) - 1),  # Scale between [-1, 1]
             ],
@@ -68,7 +76,7 @@ class CIFAR10Dataset(CIFAR10):
 
 
 @registry.register_dataset("MNISTDataset")
-class MNISTDataset(MNIST):
+class MNISTDataset(MNIST, UnivariateDataset):
     def __init__(
         self,
         root: str,
@@ -87,9 +95,15 @@ class MNISTDataset(MNIST):
             **kwargs,
         )
 
-    def __getitem__(self, index: int) -> dict[str, Tensor]:
-        data, label = super().__getitem__(index)
-        return {"data": data, "label": label}
+        self.parameter_space = DiscreteParameterSpace(
+            param_dict={
+                'labels': [0,1,2,3,4,5,6,7,8,9]
+            }
+        )
+
+    # def __getitem__(self, index: int) -> dict[str, Tensor]:
+    #     data, label = super().__getitem__(index)
+    #     return {"data": data, "label": label}
 
     @property
     def default_transforms(self) -> t.Compose:

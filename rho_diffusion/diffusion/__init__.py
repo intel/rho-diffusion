@@ -21,12 +21,14 @@ from __future__ import annotations
 from rho_diffusion.diffusion.abstract_diffusion import *
 from rho_diffusion.diffusion.ddpm import *
 from rho_diffusion.diffusion.gaussian_diffusion import * 
+from rho_diffusion.diffusion.diffusers import * 
 from rho_diffusion.diffusion.schedule import *
 
 __all__ = [
     "AbstractDiffusionPipeline",
     "DDPM",
     "GaussianDiffusionPipeline",
+    "DiffusersDDPMPipeline",
     "LinearSchedule",
     "CosineBetaSchedule",
     "SigmoidSchedule",

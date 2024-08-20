@@ -32,6 +32,11 @@ class MultiVariateDataset(torch.utils.data.Dataset):
         self.attributes = None 
         self.loaded_parameter_space = None 
 
+class UnivariateDataset(MultiVariateDataset):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
 
 class Density(Tensor):
     """

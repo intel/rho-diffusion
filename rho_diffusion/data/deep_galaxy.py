@@ -299,7 +299,6 @@ class DeepGalaxyDataset(MultiVariateDataset):
         return images
 
     def _get_labels(self, dset_name, camera_pos=0):
-        print("Getting labels...")
         # size_ratios = np.array([0.25, 0.5, 0.75, 1, 1.25, 1.5])
         # mass_ratios = np.array([0.25, 0.5, 0.75, 1, 1.25, 1.5])
         s = float(dset_name.split("_")[1])

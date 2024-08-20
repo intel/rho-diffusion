@@ -33,12 +33,13 @@ import math
 from collections.abc import Mapping, Iterable
 
 from tqdm import tqdm
+from einops import rearrange
 from rho_diffusion.registry import registry
 from rho_diffusion.diffusion import schedule
 from rho_diffusion.diffusion.abstract_diffusion import AbstractDiffusionPipeline
 from rho_diffusion.metrics.losses import normal_kl, discretized_gaussian_log_likelihood
 from rho_diffusion.layers import mean_flat
-from rho_diffusion.utils import save_model_checkpoint, sample_from_discrete_parameter_space
+from rho_diffusion.utils import save_model_checkpoint, sample_from_discrete_parameter_space, right_pad_dims_to
 
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
@@ -158,12 +159,6 @@ class GaussianDiffusionPipeline(AbstractDiffusionPipeline):
 
     def __init__(
         self,
-        # *,
-        # betas,
-        # model_mean_type,
-        # model_var_type,
-        # loss_type,
-        # rescale_timesteps=False,
         backbone: Union[str, type[nn.Module]],
         backbone_kwargs: dict[str, Any],
         schedule: schedule.AbstractSchedule,
@@ -203,12 +198,12 @@ class GaussianDiffusionPipeline(AbstractDiffusionPipeline):
 
         diffusion_defaults = dict(
             learn_sigma=False,
-            sigma_small=True,
+            sigma_small=False,
             diffusion_steps=timesteps,
             noise_schedule="cosine",
             timestep_respacing="",
             use_kl=False,
-            predict_xstart=False,
+            predict_xstart=True,
             rescale_timesteps=False,
             rescale_learned_sigmas=False,
         )
@@ -224,6 +219,8 @@ class GaussianDiffusionPipeline(AbstractDiffusionPipeline):
             self.model_mean_type = ModelMeanType.START_X
         else:
             self.model_mean_type = ModelMeanType.EPSILON
+
+        # self.model_mean_type = ModelMeanType.PREVIOUS_X
 
         if diffusion_defaults['learn_sigma'] is True:
             self.model_var_type = ModelVarType.LEARNED_RANGE
@@ -274,6 +271,8 @@ class GaussianDiffusionPipeline(AbstractDiffusionPipeline):
             * np.sqrt(alphas)
             / (1.0 - self.alphas_cumprod)
         )
+
+        self.dynamic_thresholding_percentile = 0.9
 
     def q_mean_variance(self, x_start, t):
         """
@@ -402,7 +401,17 @@ class GaussianDiffusionPipeline(AbstractDiffusionPipeline):
             if denoised_fn is not None:
                 x = denoised_fn(x)
             if clip_denoised:
-                return x.clamp(-1, 1)
+                s = torch.quantile(
+                    rearrange(x, 'b ... -> b (...)').abs(),
+                    self.dynamic_thresholding_percentile,
+                    dim=-1
+                )
+                # If threshold is less than 1, simply clamp values to [-1., 1.]
+                s.clamp_(min=1.)
+                s = right_pad_dims_to(x, s)
+                # Clamp to +/- s and divide by s to bring values back to range [-1., 1.]
+                return x.clamp(-s, s) / s
+                # return x.clamp(-1, 1)
             return x
 
         if self.model_mean_type == ModelMeanType.PREVIOUS_X:
@@ -1067,7 +1076,7 @@ class GaussianDiffusionPipeline(AbstractDiffusionPipeline):
             batch_size = x_T.size(0)
             tt = torch.tensor([t] * batch_size, device=x_T.device)
             with torch.no_grad():
-                out = self.p_sample(
+                out = self.ddim_sample(
                     self.backbone,
                     x_t,
                     tt,

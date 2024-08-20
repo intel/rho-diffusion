@@ -699,13 +699,13 @@ class UNet(nn.Module):
         emb = self.time_embed(
             sinosoidal_position_embedding(timesteps, self.model_channels),
         )
-
         if self.num_classes is not None:
             if y.dim() == 1:
                 assert y.shape == (x.shape[0],)
-                if self.label_emb is None:
-                    self.label_emb = nn.Embedding(self.num_classes, self.time_embed_dim)
-                emb = emb + self.label_emb(y)
+                # if self.label_emb is None:
+                #     self.label_emb = nn.Embedding(self.num_classes, self.model_channels * 4).to(y.device)
+                # emb = emb + self.label_emb(y)
+                emb = emb + self.cond_fn(y)
             elif y.dim() == 2:
                 if y.shape == emb.shape:
                     # the labels are already embedding
