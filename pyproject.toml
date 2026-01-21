@@ -41,7 +41,7 @@ dependencies = [
   "tqdm",
   "matplotlib",
   "lightning==2.3.3",
-  "pydantic==1.10.17",
+  "pydantic==1.10.18",
   "websockets",
   "einops==0.8.0",
   "torchmetrics[image]",
